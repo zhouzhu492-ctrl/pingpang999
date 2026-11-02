@@ -1,0 +1,2182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>乒乓球多阶段赛事记分与排赛系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f4f4f0; color: #18181b; }
+    .cross-cell-diagonal {
+      background: linear-gradient(to top right, transparent calc(50% - 1px), #d4d4d8, transparent calc(50% + 1px));
+      background-color: #e4e4e7;
+    }
+    .bracket-line { border-color: #a1a1aa; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #a1a1aa; border-radius: 3px; }
+    ::-webkit-scrollbar-track { background: #f4f4f0; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- 顶部导航栏 -->
+  <header class="bg-zinc-900 text-white px-6 py-3 flex flex-wrap items-center justify-between gap-4 border-b-2 border-orange-500 sticky top-0 z-30">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <span class="inline-block w-3 h-3 rounded-full bg-orange-500"></span>
+        <input id="tournamentTitle" type="text" value="2026 乒乓球公开赛" 
+          class="bg-transparent font-bold text-lg border-b border-transparent hover:border-zinc-500 focus:border-orange-500 focus:outline-none px-1 py-0.5"
+          onchange="updateTitle(this.value)" title="点击修改赛事名称">
+      </div>
+      <span id="modeBadge" class="text-xs bg-orange-600 text-white px-2.5 py-1 rounded font-semibold">单打</span>
+    </div>
+
+    <div class="flex items-center gap-3 flex-wrap">
+      <!-- 自由编辑开关 -->
+      <label class="flex items-center gap-2 cursor-pointer bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded border border-zinc-600 text-xs font-medium select-none">
+        <input type="checkbox" id="freeEditToggle" class="accent-orange-500 w-4 h-4" checked onchange="toggleFreeEdit(this.checked)">
+        <span>自由编辑模式 (可调组/改签/锁名次)</span>
+      </label>
+
+      <button onclick="loadDemoData()" class="text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded border border-zinc-700">加载示例名单</button>
+      <button onclick="exportCSV()" class="text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded border border-zinc-700">导出赛果 CSV</button>
+      <button onclick="resetAll()" class="text-xs bg-red-900/60 hover:bg-red-800 text-red-200 px-3 py-1.5 rounded border border-red-800">重置系统</button>
+    </div>
+  </header>
+
+  <!-- 主工作台 -->
+  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+
+    <!-- 左侧配置栏：赛制选择 + 名单粘贴 + 阶段流水线 -->
+    <aside id="leftSidebar" class="w-full lg:w-96 bg-white border-r border-zinc-300 flex flex-col overflow-y-auto shrink-0">
+      <div class="p-4 space-y-5">
+
+        <!-- 1. 比赛项目选择 -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-zinc-500">1. 选择比赛项目</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2" id="matchTypeSelector">
+            <button onclick="setMatchType('SINGLES')" data-type="SINGLES" class="type-btn py-2 px-3 rounded text-sm font-bold border-2 border-orange-500 bg-orange-50 text-orange-700">单打</button>
+            <button onclick="setMatchType('DOUBLES')" data-type="DOUBLES" class="type-btn py-2 px-3 rounded text-sm font-bold border border-zinc-300 text-zinc-700 hover:bg-zinc-50">双打</button>
+            <button onclick="setMatchType('TEAM')" data-type="TEAM" class="type-btn py-2 px-3 rounded text-sm font-bold border border-zinc-300 text-zinc-700 hover:bg-zinc-50">团体</button>
+          </div>
+          <!-- 团体赛盘制选择 -->
+          <div id="teamFormatBox" class="mt-2 hidden">
+            <select id="teamFormatSelect" onchange="updateTeamFormat(this.value)" class="w-full text-xs border border-zinc-300 rounded p-2 bg-zinc-50">
+              <option value="OLYMPIC_5">奥运团体五盘三胜 (首盘双打+四单打)</option>
+              <option value="SWAYTHLING_5">斯韦思林杯五盘三胜 (五场全单打)</option>
+              <option value="CUSTOM_3">业余快捷团体三盘两胜 (单-双-单)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 2. 极速粘贴名单 -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-bold uppercase tracking-wider text-zinc-500">2. 粘贴参赛名单 (<span id="competitorCount">0</span>)</span>
+            <div class="space-x-1">
+              <button id="pairDoublesBtn" onclick="autoPairSinglesToDoubles()" class="hidden text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 px-2 py-0.5 rounded font-medium">散人一键配对</button>
+              <button onclick="clearCompetitors()" class="text-xs text-zinc-400 hover:text-red-600">清空</button>
+            </div>
+          </div>
+          <p id="pasteHint" class="text-xs text-zinc-500 mb-2">支持换行、空格、逗号分隔，自动过滤序号。可直接从 Excel 或微信接龙复制粘贴。</p>
+          <textarea id="pasteInput" rows="4" placeholder="在此粘贴全部名字，例如：&#10;1. 樊振东&#10;2. 许昕&#10;3. 马龙&#10;4. 王楚钦..." 
+            class="w-full border border-zinc-300 rounded p-2.5 text-sm focus:border-orange-500 focus:outline-none font-mono bg-zinc-50"></textarea>
+          <div class="flex gap-2 mt-2">
+            <button onclick="parsePastedNames(false)" class="flex-1 bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold py-2 px-3 rounded">覆盖导入名单</button>
+            <button onclick="parsePastedNames(true)" class="bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-xs font-bold py-2 px-3 rounded">追加名单</button>
+          </div>
+
+          <!-- 已解析的选手胶囊列表 (可改名、可删、可调种子顺序) -->
+          <div id="competitorListContainer" class="mt-3 max-h-44 overflow-y-auto border border-zinc-200 rounded p-2 bg-zinc-50/50 flex flex-wrap gap-1.5 empty:hidden"></div>
+        </div>
+
+        <!-- 3. 多阶段赛制配置流水线 -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold uppercase tracking-wider text-zinc-500">3. 阶段配置流水线</span>
+            <button onclick="addStageConfig()" class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold px-2.5 py-1 rounded">+ 添加阶段</button>
+          </div>
+          <div id="stageConfigList" class="space-y-3"></div>
+        </div>
+
+        <!-- 4. 一键生成排赛按钮 -->
+        <div class="pt-2 border-t border-zinc-200">
+          <button onclick="generateTournamentSchedule()" class="w-full bg-orange-600 hover:bg-orange-500 text-white font-bold py-3 px-4 rounded shadow-sm transition flex items-center justify-center gap-2">
+            <span>⚡ 一键生成 / 重新排赛</span>
+          </button>
+          <p class="text-[11px] text-zinc-400 mt-1.5 text-center">提示：生成后仍可在右侧自由调组、加人、改比分和强行指定晋级</p>
+        </div>
+
+      </div>
+    </aside>
+
+    <!-- 右侧主画布：阶段切换页签 + 赛程/九宫格/淘汰树 + 总排名 -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-zinc-100">
+      
+      <!-- 阶段导航栏 -->
+      <div class="bg-white border-b border-zinc-300 px-6 py-2.5 flex items-center justify-between flex-wrap gap-3">
+        <div id="stageTabs" class="flex items-center gap-2 flex-wrap">
+          <!-- 动态生成阶段 Tab -->
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="openAddCustomMatchModal()" class="text-xs bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 text-zinc-700 px-3 py-1.5 rounded font-medium">+ 手动加一场比赛</button>
+          <button onclick="advanceToNextStage()" id="advanceStageBtn" class="hidden text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded font-bold shadow-sm">
+            推进晋级名单至下一阶段 →
+          </button>
+        </div>
+      </div>
+
+      <!-- 主内容渲染区 -->
+      <div id="mainStageViewport" class="flex-1 overflow-y-auto p-6">
+        <!-- 动态渲染当前阶段或总排名 -->
+      </div>
+
+    </main>
+  </div>
+
+  <!-- 弹窗1：记分与单场微调模态框 (含极速录分 + 详细小分 + 团体盘次 + 实时裁判记分牌入口) -->
+  <div id="scoreModal" class="fixed inset-0 bg-black/60 z-40 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-xl w-full shadow-2xl border border-zinc-300 overflow-hidden">
+      <div class="bg-zinc-900 text-white px-5 py-3.5 flex items-center justify-between">
+        <div>
+          <span id="modalMatchTitle" class="font-bold text-sm">记分面板</span>
+          <span id="modalBestOfBadge" class="ml-2 text-xs bg-zinc-700 px-2 py-0.5 rounded">五局三胜</span>
+        </div>
+        <button onclick="closeScoreModal()" class="text-zinc-400 hover:text-white text-lg leading-none">&times;</button>
+      </div>
+
+      <div class="p-5 space-y-5 max-h-[82vh] overflow-y-auto">
+        <!-- 双方选手选择与大比分输入 -->
+        <div class="grid grid-cols-7 items-center gap-2 bg-zinc-50 p-4 rounded border border-zinc-200">
+          <div class="col-span-3 text-center">
+            <select id="modalPlayerASelect" onchange="changeMatchCompetitor('A', this.value)" class="w-full font-bold text-base text-center bg-white border border-zinc-300 rounded px-2 py-1.5 mb-1"></select>
+            <div class="text-[11px] text-zinc-400">主队 / 选手 A</div>
+          </div>
+
+          <div class="col-span-1 flex items-center justify-center gap-1 font-mono text-2xl font-black">
+            <input id="modalBigScoreA" type="number" min="0" max="9" class="w-12 text-center border-2 border-zinc-300 rounded py-1 focus:border-orange-500 focus:outline-none" value="0">
+            <span>:</span>
+            <input id="modalBigScoreB" type="number" min="0" max="9" class="w-12 text-center border-2 border-zinc-300 rounded py-1 focus:border-orange-500 focus:outline-none" value="0">
+          </div>
+
+          <div class="col-span-3 text-center">
+            <select id="modalPlayerBSelect" onchange="changeMatchCompetitor('B', this.value)" class="w-full font-bold text-base text-center bg-white border border-zinc-300 rounded px-2 py-1.5 mb-1"></select>
+            <div class="text-[11px] text-zinc-400">客队 / 选手 B</div>
+          </div>
+        </div>
+
+        <!-- 极速比分快捷按钮 -->
+        <div>
+          <div class="text-xs font-bold text-zinc-500 mb-2">⚡ 一键极速录分 (点击直接填入大比分并保存)：</div>
+          <div id="quickScoreButtons" class="flex flex-wrap gap-2"></div>
+        </div>
+
+        <!-- 特殊判罚：弃权/伤退直接获胜 -->
+        <div class="flex items-center justify-between bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs">
+          <span class="text-amber-800 font-medium">特殊情况判罚 (W.O. 弃权得0分 / 保送晋级)：</span>
+          <div class="space-x-1.5">
+            <button onclick="setWalkover('A')" class="bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 px-2.5 py-1 rounded font-bold">判 A 胜 (B弃权)</button>
+            <button onclick="setWalkover('B')" class="bg-white hover:bg-amber-100 border border-amber-300 text-amber-900 px-2.5 py-1 rounded font-bold">判 B 胜 (A弃权)</button>
+          </div>
+        </div>
+
+        <!-- 每局小分明细 (用于同分连环套算小分率) & 实时裁判记分牌入口 -->
+        <div class="border-t border-zinc-200 pt-4">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-bold text-zinc-600">各局小分明细 (选填，用于3人同分时计算净胜小分率)</span>
+            <button onclick="openLiveScoreboard()" class="text-xs bg-orange-600 hover:bg-orange-500 text-white px-3 py-1 rounded font-bold shadow-sm">
+              🏓 打开球台全屏实时记分牌
+            </button>
+          </div>
+          <div id="gameScoresInputs" class="grid grid-cols-5 sm:grid-cols-7 gap-2"></div>
+        </div>
+
+        <!-- 团体赛分盘明细记录区 (仅团体赛显示) -->
+        <div id="teamSubMatchesSection" class="border-t border-zinc-200 pt-4 hidden">
+          <div class="text-xs font-bold text-zinc-600 mb-2">团体赛各盘对阵明细 (选填出场队员与盘比分)</div>
+          <div id="teamSubMatchesList" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <div class="bg-zinc-100 px-5 py-3 flex items-center justify-between border-t border-zinc-200">
+        <button onclick="clearMatchResult()" class="text-xs text-red-600 hover:underline font-medium">清空本场比分 (重置为未开赛)</button>
+        <div class="space-x-2">
+          <button onclick="closeScoreModal()" class="px-4 py-1.5 rounded text-xs font-bold border border-zinc-300 bg-white hover:bg-zinc-50">取消</button>
+          <button onclick="saveMatchModal()" class="px-5 py-1.5 rounded text-xs font-bold bg-zinc-900 hover:bg-zinc-800 text-white">保存比分并更新排名</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 弹窗2：全屏球台实时裁判记分牌 (支持发球权2分轮换、10平后1分轮换、自动算局分) -->
+  <div id="liveScoreboardModal" class="fixed inset-0 bg-zinc-950 text-white z-50 hidden flex-col justify-between p-6 select-none">
+    <div class="flex items-center justify-between border-b border-zinc-800 pb-4">
+      <div class="flex items-center gap-3">
+        <span class="bg-orange-600 text-xs font-bold px-2.5 py-1 rounded">实时裁判台</span>
+        <span id="liveMatchInfo" class="text-sm text-zinc-300 font-medium">第 1 局</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="toggleFirstServer()" class="text-xs bg-zinc-800 hover:bg-zinc-700 px-3 py-1.5 rounded border border-zinc-700">切换本局首发球方</button>
+        <button onclick="finishLiveGame()" class="text-xs bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded font-bold">结束本局并记入小分</button>
+        <button onclick="closeLiveScoreboard()" class="text-xs bg-zinc-800 hover:bg-zinc-700 px-4 py-1.5 rounded font-bold">保存并返回</button>
+      </div>
+    </div>
+
+    <!-- 记分大面板 -->
+    <div class="flex-1 grid grid-cols-2 gap-6 my-6 items-stretch">
+      <!-- 选手 A -->
+      <div onclick="addLivePoint('A', 1)" class="bg-zinc-900 hover:bg-zinc-800/80 border-2 border-zinc-800 rounded-2xl flex flex-col items-center justify-between p-6 cursor-pointer relative active:scale-[0.99] transition">
+        <div class="w-full flex items-center justify-between">
+          <span id="liveServerA" class="text-xs bg-amber-500 text-black font-black px-3 py-1 rounded-full">🏓 当前发球</span>
+          <span class="text-zinc-400 text-sm">局分：<strong id="liveGamesA" class="text-white text-2xl">0</strong></span>
+        </div>
+        <div id="liveNameA" class="text-2xl sm:text-4xl font-black text-center mt-2">选手 A</div>
+        <div id="livePointsA" class="text-[110px] sm:text-[160px] font-mono font-black leading-none text-orange-400 my-auto">0</div>
+        <div class="flex items-center gap-4 w-full justify-center" onclick="event.stopPropagation()">
+          <button onclick="addLivePoint('A', -1)" class="bg-zinc-800 hover:bg-zinc-700 px-5 py-2 rounded text-sm font-bold">-1 纠错</button>
+          <button onclick="addLivePoint('A', 1)" class="bg-orange-600 hover:bg-orange-500 px-8 py-2 rounded text-sm font-bold">+1 得分</button>
+        </div>
+      </div>
+
+      <!-- 选手 B -->
+      <div onclick="addLivePoint('B', 1)" class="bg-zinc-900 hover:bg-zinc-800/80 border-2 border-zinc-800 rounded-2xl flex flex-col items-center justify-between p-6 cursor-pointer relative active:scale-[0.99] transition">
+        <div class="w-full flex items-center justify-between">
+          <span id="liveServerB" class="text-xs bg-amber-500 text-black font-black px-3 py-1 rounded-full invisible">🏓 当前发球</span>
+          <span class="text-zinc-400 text-sm">局分：<strong id="liveGamesB" class="text-white text-2xl">0</strong></span>
+        </div>
+        <div id="liveNameB" class="text-2xl sm:text-4xl font-black text-center mt-2">选手 B</div>
+        <div id="livePointsB" class="text-[110px] sm:text-[160px] font-mono font-black leading-none text-emerald-400 my-auto">0</div>
+        <div class="flex items-center gap-4 w-full justify-center" onclick="event.stopPropagation()">
+          <button onclick="addLivePoint('B', -1)" class="bg-zinc-800 hover:bg-zinc-700 px-5 py-2 rounded text-sm font-bold">-1 纠错</button>
+          <button onclick="addLivePoint('B', 1)" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-2 rounded text-sm font-bold">+1 得分</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部历史小分展示 -->
+    <div id="liveHistoryBar" class="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 flex items-center justify-center gap-4 text-sm font-mono"></div>
+  </div>
+
+<script>
+/**
+ * ============================================================================
+ * 核心全局状态与数据结构 (支持单打/双打/团体 + 多阶段自由编辑)
+ * ============================================================================
+ */
+const STORAGE_KEY = 'TT_TOURNAMENT_STATE_V1';
+
+let state = {
+  title: '2026 乒乓球公开赛',
+  matchType: 'SINGLES', // 'SINGLES' | 'DOUBLES' | 'TEAM'
+  teamFormat: 'OLYMPIC_5',
+  freeEditMode: true,
+  competitors: [], // { id, name, members: [], seed: number }
+  stageConfigs: [
+    {
+      id: 'stage_1',
+      name: '第一阶段：小组循环赛',
+      type: 'GROUP_ROUND_ROBIN', // 'GROUP_ROUND_ROBIN' | 'FULL_ROUND_ROBIN' | 'KNOCKOUT'
+      bestOf: 5,
+      groupCount: 2,
+      advancePerGroup: 2,
+      seedingMethod: 'SNAKE', // 'SNAKE' | 'RANDOM' | 'SEQUENTIAL'
+      hasThirdPlace: true
+    },
+    {
+      id: 'stage_2',
+      name: '第二阶段：淘汰赛决胜',
+      type: 'KNOCKOUT',
+      bestOf: 5,
+      groupCount: 1,
+      advancePerGroup: 1,
+      seedingMethod: 'SNAKE',
+      hasThirdPlace: true
+    }
+  ],
+  // 实际运行时的阶段实例数据
+  runtimeStages: [], 
+  activeTab: 'stage_0' // 'stage_0', 'stage_1', ... or 'FINAL_RANKING'
+};
+
+// 当前正在编辑的比赛上下文
+let activeMatchCtx = null; 
+let liveState = { gameIndex: 0, ptsA: 0, ptsB: 0, firstServer: 'A' };
+
+/**
+ * ============================================================================
+ * 初始化与本地持久化
+ * ============================================================================
+ */
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved) {
+    try {
+      state = JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  if (!state.competitors || state.competitors.length === 0) {
+    loadDemoData(true);
+  } else {
+    syncUIFromState();
+  }
+});
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function syncUIFromState() {
+  document.getElementById('tournamentTitle').value = state.title || '乒乓球比赛';
+  document.getElementById('freeEditToggle').checked = !!state.freeEditMode;
+  renderMatchTypeSelector();
+  renderCompetitorCapsules();
+  renderStageConfigList();
+  renderStageTabs();
+  renderMainViewport();
+}
+
+function updateTitle(val) {
+  state.title = val.trim() || '乒乓球比赛';
+  saveState();
+}
+
+function toggleFreeEdit(checked) {
+  state.freeEditMode = checked;
+  saveState();
+  renderMainViewport();
+}
+
+/**
+ * ============================================================================
+ * 1. 比赛项目切换 (单打 / 双打 / 团体)
+ * ============================================================================
+ */
+function setMatchType(type) {
+  state.matchType = type;
+  saveState();
+  renderMatchTypeSelector();
+}
+
+function updateTeamFormat(fmt) {
+  state.teamFormat = fmt;
+  saveState();
+}
+
+function renderMatchTypeSelector() {
+  const map = { SINGLES: '单打', DOUBLES: '双打', TEAM: '团体' };
+  document.getElementById('modeBadge').textContent = map[state.matchType];
+
+  document.querySelectorAll('.type-btn').forEach(btn => {
+    if (btn.dataset.type === state.matchType) {
+      btn.className = 'type-btn py-2 px-3 rounded text-sm font-bold border-2 border-orange-500 bg-orange-50 text-orange-700';
+    } else {
+      btn.className = 'type-btn py-2 px-3 rounded text-sm font-bold border border-zinc-300 text-zinc-700 hover:bg-zinc-50';
+    }
+  });
+
+  const hint = document.getElementById('pasteHint');
+  const pairBtn = document.getElementById('pairDoublesBtn');
+  const teamBox = document.getElementById('teamFormatBox');
+  const input = document.getElementById('pasteInput');
+
+  if (state.matchType === 'SINGLES') {
+    hint.textContent = '单打：支持换行、空格、逗号分隔，自动去除序号。';
+    input.placeholder = '例如：\n1. 樊振东\n2. 许昕\n3. 马龙\n4. 王楚钦';
+    pairBtn.classList.add('hidden');
+    teamBox.classList.add('hidden');
+  } else if (state.matchType === 'DOUBLES') {
+    hint.textContent = '双打：每行写一对（如 许昕/樊振东），或直接粘贴单人名单后点击右上角“散人一键配对”。';
+    input.placeholder = '成对粘贴示例：\n许昕/樊振东\n马龙/王楚钦\n\n或直接粘贴单人名字后点【散人一键配对】';
+    pairBtn.classList.remove('hidden');
+    teamBox.classList.add('hidden');
+  } else {
+    hint.textContent = '团体：每行写一个队名；也可写“队名：队员A,队员B,队员C”自动解析队员。';
+    input.placeholder = '示例：\n上海地产：樊振东,许昕,周恺\n北京八喜：马龙,王楚钦,闫安\n山东鲁能\n广东队';
+    pairBtn.classList.add('hidden');
+    teamBox.classList.remove('hidden');
+    document.getElementById('teamFormatSelect').value = state.teamFormat || 'OLYMPIC_5';
+  }
+}
+
+/**
+ * ============================================================================
+ * 2. 智能名单粘贴解析引擎
+ * ============================================================================
+ */
+function parsePastedNames(append = false) {
+  const raw = document.getElementById('pasteInput').value.trim();
+  if (!raw) {
+    alert('请先在文本框中粘贴名字！');
+    return;
+  }
+
+  let lines = [];
+  if (state.matchType === 'SINGLES') {
+    // 单打支持换行、逗号、顿号、分号或空格切分
+    lines = raw
+      .split(/[\n,，、;；\t]+/)
+      .flatMap(item => item.trim().split(/\s+/))
+      .map(s => cleanPrefixNumber(s))
+      .filter(Boolean);
+  } else {
+    // 双打与团体优先按换行或分号切分
+    lines = raw
+      .split(/[\n;；]+/)
+      .map(s => cleanPrefixNumber(s))
+      .filter(Boolean);
+  }
+
+  if (!append) state.competitors = [];
+  const baseIdx = state.competitors.length;
+
+  lines.forEach((line, idx) => {
+    const id = 'comp_' + Date.now() + '_' + (baseIdx + idx) + '_' + Math.random().toString(36).slice(2, 6);
+    if (state.matchType === 'TEAM' && /[:：]/.test(line)) {
+      const [teamName, memberStr] = line.split(/[:：]/);
+      const members = memberStr ? memberStr.split(/[,，、\s/]+/).filter(Boolean) : [];
+      state.competitors.push({
+        id,
+        name: teamName.trim(),
+        members,
+        seed: state.competitors.length + 1
+      });
+    } else if (state.matchType === 'DOUBLES' && /[\/+＋&－-]/.test(line)) {
+      const parts = line.split(/[\/+＋&－-]/).map(s => s.trim()).filter(Boolean);
+      state.competitors.push({
+        id,
+        name: parts.join('/'),
+        members: parts,
+        seed: state.competitors.length + 1
+      });
+    } else {
+      state.competitors.push({
+        id,
+        name: line.trim(),
+        members: [line.trim()],
+        seed: state.competitors.length + 1
+      });
+    }
+  });
+
+  document.getElementById('pasteInput').value = '';
+  autoAdjustDefaultStageParams();
+  saveState();
+  renderCompetitorCapsules();
+  renderStageConfigList();
+}
+
+function cleanPrefixNumber(str) {
+  // 剔除 "1."、"1、"、"(1)"、"①" 等常见接龙序号
+  return str.replace(/^\s*([0-9]+[\.、)\s]+|[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]+)\s*/, '').trim();
+}
+
+// 双打模式：将未配对的单人胶囊两两合并为一队
+function autoPairSinglesToDoubles() {
+  if (state.competitors.length < 2) return;
+  const singles = state.competitors.filter(c => !c.name.includes('/'));
+  const paired = state.competitors.filter(c => c.name.includes('/'));
+
+  for (let i = 0; i < singles.length; i += 2) {
+    if (i + 1 < singles.length) {
+      paired.push({
+        id: singles[i].id,
+        name: `${singles[i].name}/${singles[i + 1].name}`,
+        members: [singles[i].name, singles[i + 1].name],
+        seed: paired.length + 1
+      });
+    } else {
+      paired.push({
+        ...singles[i],
+        name: `${singles[i].name}/待定搭档`,
+        seed: paired.length + 1
+      });
+    }
+  }
+  state.competitors = paired;
+  autoAdjustDefaultStageParams();
+  saveState();
+  renderCompetitorCapsules();
+  renderStageConfigList();
+}
+
+function autoAdjustDefaultStageParams() {
+  const n = state.competitors.length;
+  if (n >= 6 && state.stageConfigs[0]?.type === 'GROUP_ROUND_ROBIN') {
+    const recGroups = n >= 12 ? 4 : 2;
+    state.stageConfigs[0].groupCount = recGroups;
+    state.stageConfigs[0].advancePerGroup = 2;
+  }
+}
+
+function renderCompetitorCapsules() {
+  const container = document.getElementById('competitorListContainer');
+  document.getElementById('competitorCount').textContent = state.competitors.length;
+  container.innerHTML = '';
+
+  state.competitors.forEach((c, idx) => {
+    const tag = document.createElement('div');
+    tag.className = 'inline-flex items-center gap-1 bg-white border border-zinc-300 rounded px-2 py-1 text-xs shadow-2xs group';
+    tag.innerHTML = `
+      <span class="text-[10px] font-mono text-zinc-400 font-bold">#${idx + 1}</span>
+      <span class="font-medium text-zinc-800 cursor-pointer hover:text-orange-600" onclick="promptRenameCompetitor('${c.id}')" title="点击改名">${escapeHtml(c.name)}</span>
+      ${idx > 0 ? `<button onclick="moveCompetitorSeed(${idx}, -1)" class="text-zinc-300 hover:text-zinc-700 px-0.5" title="前移种子位">←</button>` : ''}
+      <button onclick="removeCompetitor('${c.id}')" class="text-zinc-300 hover:text-red-600 font-bold ml-0.5" title="删除">&times;</button>
+    `;
+    container.appendChild(tag);
+  });
+}
+
+function promptRenameCompetitor(compId) {
+  const comp = state.competitors.find(c => c.id === compId);
+  if (!comp) return;
+  const newName = prompt('修改选手/队伍名称：', comp.name);
+  if (newName && newName.trim()) {
+    comp.name = newName.trim();
+    saveState();
+    renderCompetitorCapsules();
+    renderMainViewport();
+  }
+}
+
+function moveCompetitorSeed(idx, delta) {
+  const target = idx + delta;
+  if (target < 0 || target >= state.competitors.length) return;
+  const temp = state.competitors[idx];
+  state.competitors[idx] = state.competitors[target];
+  state.competitors[target] = temp;
+  saveState();
+  renderCompetitorCapsules();
+}
+
+function removeCompetitor(compId) {
+  state.competitors = state.competitors.filter(c => c.id !== compId);
+  saveState();
+  renderCompetitorCapsules();
+}
+
+function clearCompetitors() {
+  if (!confirm('确定要清空当前全部参赛名单吗？')) return;
+  state.competitors = [];
+  saveState();
+  renderCompetitorCapsules();
+}
+
+/**
+ * ============================================================================
+ * 3. 多阶段流水线配置器
+ * ============================================================================
+ */
+function renderStageConfigList() {
+  const list = document.getElementById('stageConfigList');
+  list.innerHTML = '';
+
+  state.stageConfigs.forEach((stg, idx) => {
+    const card = document.createElement('div');
+    card.className = 'border border-zinc-300 rounded-md p-3 bg-zinc-50 space-y-2.5 relative';
+    card.innerHTML = `
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-extrabold text-zinc-800">阶段 ${idx + 1}</span>
+        ${state.stageConfigs.length > 1 ? `<button onclick="removeStageConfig(${idx})" class="text-xs text-zinc-400 hover:text-red-600">删除此阶段</button>` : ''}
+      </div>
+
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-[11px] text-zinc-500 mb-0.5">赛制类型</label>
+          <select onchange="updateStageConfig(${idx}, 'type', this.value)" class="w-full text-xs border border-zinc-300 rounded p-1.5 bg-white font-semibold">
+            <option value="GROUP_ROUND_ROBIN" ${stg.type === 'GROUP_ROUND_ROBIN' ? 'selected' : ''}>分组循环赛 (小组赛)</option>
+            <option value="FULL_ROUND_ROBIN" ${stg.type === 'FULL_ROUND_ROBIN' ? 'selected' : ''}>全员大循环</option>
+            <option value="KNOCKOUT" ${stg.type === 'KNOCKOUT' ? 'selected' : ''}>单败淘汰赛</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] text-zinc-500 mb-0.5">默认几局几胜</label>
+          <select onchange="updateStageConfig(${idx}, 'bestOf', Number(this.value))" class="w-full text-xs border border-zinc-300 rounded p-1.5 bg-white">
+            <option value="3" ${stg.bestOf === 3 ? 'selected' : ''}>三局两胜</option>
+            <option value="5" ${stg.bestOf === 5 ? 'selected' : ''}>五局三胜</option>
+            <option value="7" ${stg.bestOf === 7 ? 'selected' : ''}>七局四胜</option>
+          </select>
+        </div>
+      </div>
+
+      ${stg.type === 'GROUP_ROUND_ROBIN' ? `
+        <div class="grid grid-cols-3 gap-2 pt-1 border-t border-zinc-200">
+          <div>
+            <label class="block text-[11px] text-zinc-500 mb-0.5">分为几组</label>
+            <input type="number" min="1" max="32" value="${stg.groupCount || 2}" onchange="updateStageConfig(${idx}, 'groupCount', Number(this.value))" class="w-full text-xs border border-zinc-300 rounded p-1.5 bg-white text-center font-bold">
+          </div>
+          <div>
+            <label class="block text-[11px] text-zinc-500 mb-0.5">每组晋级几人</label>
+            <input type="number" min="1" max="16" value="${stg.advancePerGroup || 2}" onchange="updateStageConfig(${idx}, 'advancePerGroup', Number(this.value))" class="w-full text-xs border border-zinc-300 rounded p-1.5 bg-white text-center font-bold text-emerald-700">
+          </div>
+          <div>
+            <label class="block text-[11px] text-zinc-500 mb-0.5">分档方式</label>
+            <select onchange="updateStageConfig(${idx}, 'seedingMethod', this.value)" class="w-full text-xs border border-zinc-300 rounded p-1.5 bg-white">
+              <option value="SNAKE" ${stg.seedingMethod === 'SNAKE' ? 'selected' : ''}>蛇形分组</option>
+              <option value="RANDOM" ${stg.seedingMethod === 'RANDOM' ? 'selected' : ''}>随机抽签</option>
+              <option value="SEQUENTIAL" ${stg.seedingMethod === 'SEQUENTIAL' ? 'selected' : ''}>顺序分组</option>
+            </select>
+          </div>
+        </div>
+      ` : ''}
+
+      ${stg.type === 'FULL_ROUND_ROBIN' && idx < state.stageConfigs.length - 1 ? `
+        <div class="pt-1 border-t border-zinc-200 flex items-center justify-between">
+          <span class="text-[11px] text-zinc-500">本阶段晋级下一阶段人数：</span>
+          <input type="number" min="1" max="64" value="${stg.advancePerGroup || 4}" onchange="updateStageConfig(${idx}, 'advancePerGroup', Number(this.value))" class="w-16 text-xs border border-zinc-300 rounded p-1 bg-white text-center font-bold">
+        </div>
+      ` : ''}
+
+      ${stg.type === 'KNOCKOUT' ? `
+        <div class="pt-1 border-t border-zinc-200 flex items-center justify-between">
+          <label class="flex items-center gap-1.5 text-xs text-zinc-600 cursor-pointer">
+            <input type="checkbox" ${stg.hasThirdPlace ? 'checked' : ''} onchange="updateStageConfig(${idx}, 'hasThirdPlace', this.checked)" class="accent-orange-500">
+            <span>包含三四名决赛 (季军争夺战)</span>
+          </label>
+        </div>
+      ` : ''}
+    `;
+    list.appendChild(card);
+  });
+}
+
+function addStageConfig() {
+  const nextIdx = state.stageConfigs.length + 1;
+  state.stageConfigs.push({
+    id: 'stage_' + Date.now(),
+    name: `第${nextIdx}阶段：淘汰赛`,
+    type: 'KNOCKOUT',
+    bestOf: 5,
+    groupCount: 2,
+    advancePerGroup: 2,
+    seedingMethod: 'SNAKE',
+    hasThirdPlace: true
+  });
+  saveState();
+  renderStageConfigList();
+}
+
+function removeStageConfig(idx) {
+  state.stageConfigs.splice(idx, 1);
+  saveState();
+  renderStageConfigList();
+}
+
+function updateStageConfig(idx, key, val) {
+  state.stageConfigs[idx][key] = val;
+  saveState();
+  renderStageConfigList();
+}
+
+/**
+ * ============================================================================
+ * 4. 排赛算法核心引擎 (蛇形分组 + 贝格尔循环编排 + 2的幂次淘汰树与同组规避)
+ * ============================================================================
+ */
+function generateTournamentSchedule() {
+  if (state.competitors.length < 2) {
+    alert('至少需要 2 名参赛选手/队伍才能排赛！');
+    return;
+  }
+
+  state.runtimeStages = state.stageConfigs.map((cfg, sIdx) => {
+    const typeLabel = cfg.type === 'GROUP_ROUND_ROBIN' ? '小组赛' : (cfg.type === 'FULL_ROUND_ROBIN' ? '大循环' : '淘汰赛');
+    const stageObj = {
+      index: sIdx,
+      name: `阶段 ${sIdx + 1}：${typeLabel}`,
+      type: cfg.type,
+      bestOf: cfg.bestOf,
+      groupCount: cfg.groupCount || 1,
+      advancePerGroup: cfg.advancePerGroup || 2,
+      seedingMethod: cfg.seedingMethod || 'SNAKE',
+      hasThirdPlace: !!cfg.hasThirdPlace,
+      groups: [], // 循环赛使用的分组 [{ id, name, competitorIds, matches, manualRanks: {}, manualAdvance: {} }]
+      knockoutRounds: [] // 淘汰赛使用的轮次 [{ name, matches: [] }]
+    };
+
+    // 第一阶段立即注入当前全部选手并排赛；后续阶段先建立空架子或预留晋级位
+    if (sIdx === 0) {
+      populateStageWithCompetitors(stageObj, state.competitors.map(c => c.id));
+    }
+    return stageObj;
+  });
+
+  state.activeTab = 'stage_0';
+  saveState();
+  renderStageTabs();
+  renderMainViewport();
+}
+
+// 将指定选手ID列表排入某个阶段
+function populateStageWithCompetitors(stageObj, compIds, groupOriginMap = {}) {
+  if (stageObj.type === 'GROUP_ROUND_ROBIN' || stageObj.type === 'FULL_ROUND_ROBIN') {
+    const gCount = stageObj.type === 'FULL_ROUND_ROBIN' ? 1 : Math.max(1, Math.min(stageObj.groupCount, compIds.length));
+    let pool = [...compIds];
+
+    if (stageObj.seedingMethod === 'RANDOM') {
+      pool.sort(() => Math.random() - 0.5);
+    }
+
+    const buckets = Array.from({ length: gCount }, () => []);
+    if (stageObj.seedingMethod === 'SEQUENTIAL') {
+      const perGroup = Math.ceil(pool.length / gCount);
+      pool.forEach((id, i) => buckets[Math.min(gCount - 1, Math.floor(i / perGroup))].push(id));
+    } else {
+      // 默认蛇形分组 (Snake Seeding): 1,2,3 -> 3,2,1
+      pool.forEach((id, i) => {
+        const row = Math.floor(i / gCount);
+        const col = row % 2 === 0 ? (i % gCount) : (gCount - 1 - (i % gCount));
+        buckets[col].push(id);
+      });
+    }
+
+    stageObj.groups = buckets.map((ids, gIdx) => {
+      const groupId = `s${stageObj.index}_g${gIdx}`;
+      const groupName = gCount === 1 ? '全员循环池' : `${String.fromCharCode(65 + gIdx)} 组`;
+      return {
+        id: groupId,
+        name: groupName,
+        competitorIds: ids,
+        matches: generateBergerRoundRobinMatches(stageObj.index, groupId, ids, stageObj.bestOf),
+        manualOrder: null, // 若用户手动调整了名次顺序，存放在此数组
+        manualAdvance: {}  // { [compId]: boolean }
+      };
+    });
+  } else if (stageObj.type === 'KNOCKOUT') {
+    stageObj.knockoutRounds = generateKnockoutBracket(stageObj.index, compIds, stageObj.bestOf, stageObj.hasThirdPlace, groupOriginMap);
+  }
+}
+
+// 贝格尔编排法生成组内单循环赛程
+function generateBergerRoundRobinMatches(stageIdx, groupId, compIds, bestOf) {
+  const list = [...compIds];
+  if (list.length < 2) return [];
+  if (list.length % 2 === 1) list.push('BYE'); // 奇数补轮空
+
+  const n = list.length;
+  const rounds = n - 1;
+  const half = n / 2;
+  const matches = [];
+  let orderCounter = 1;
+
+  const rotating = list.slice(1);
+  for (let r = 0; r < rounds; r++) {
+    const current = [list[0], ...rotating];
+    for (let i = 0; i < half; i++) {
+      const pA = current[i];
+      const pB = current[n - 1 - i];
+      if (pA !== 'BYE' && pB !== 'BYE') {
+        matches.push(createMatchObject(stageIdx, groupId, r + 1, orderCounter++, pA, pB, bestOf));
+      }
+    }
+    // 逆时针轮转
+    rotating.unshift(rotating.pop());
+  }
+  return matches;
+}
+
+// 生成标准 2^k 单败淘汰赛签表 (自动分配种子轮空位 + 上下半区同组规避)
+function generateKnockoutBracket(stageIdx, compIds, bestOf, hasThirdPlace, groupOriginMap = {}) {
+  const count = Math.max(2, compIds.length);
+  const bracketSize = Math.pow(2, Math.ceil(Math.log2(count)));
+  const totalRounds = Math.log2(bracketSize);
+
+  // 标准种子定位表 (保证1号在顶、2号在底、3/4号分别在上下半区中段)
+  function getStandardSeedPositions(size) {
+    let pos = [1, 2];
+    while (pos.length < size) {
+      const next = [];
+      const sum = pos.length * 2 + 1;
+      for (const p of pos) {
+        next.push(p);
+        next.push(sum - p);
+      }
+      pos = next;
+    }
+    return pos; // 1-based seed index at each slot
+  }
+
+  const seedMap = getStandardSeedPositions(bracketSize);
+  const slots = new Array(bracketSize).fill('BYE');
+
+  // 将晋级选手放入对应种子位
+  compIds.forEach((id, idx) => {
+    const targetSlot = seedMap.indexOf(idx + 1);
+    if (targetSlot !== -1) slots[targetSlot] = id;
+  });
+
+  const rounds = [];
+  const roundNames = (rIdx, total) => {
+    const remain = Math.pow(2, total - rIdx);
+    if (remain === 2) return '决赛 (冠亚军争夺)';
+    if (remain === 4) return '半决赛 (4强)';
+    if (remain === 8) return '1/4 决赛 (8强)';
+    if (remain === 16) return '1/8 决赛 (16强)';
+    return `淘汰赛第 ${rIdx + 1} 轮 (${remain}强)`;
+  };
+
+  for (let r = 0; r < totalRounds; r++) {
+    const matchCount = bracketSize / Math.pow(2, r + 1);
+    const roundMatches = [];
+    for (let m = 0; m < matchCount; m++) {
+      const pA = r === 0 ? slots[m * 2] : 'TBD';
+      const pB = r === 0 ? slots[m * 2 + 1] : 'TBD';
+      const match = createMatchObject(stageIdx, `ko_r${r}`, r + 1, m + 1, pA, pB, bestOf);
+      // 首轮若遇到 BYE，自动直接晋级
+      if (r === 0) {
+        if (pA !== 'BYE' && pB === 'BYE') {
+          match.winnerId = pA;
+          match.status = 'BYE_WIN';
+        } else if (pB !== 'BYE' && pA === 'BYE') {
+          match.winnerId = pB;
+          match.status = 'BYE_WIN';
+        }
+      }
+      roundMatches.push(match);
+    }
+    rounds.push({
+      roundIndex: r,
+      name: roundNames(r, totalRounds),
+      matches: roundMatches
+    });
+  }
+
+  // 若开启三四名决赛且至少有半决赛
+  if (hasThirdPlace && totalRounds >= 2) {
+    rounds.push({
+      roundIndex: totalRounds,
+      isThirdPlace: true,
+      name: '三四名决赛 (季军争夺)',
+      matches: [createMatchObject(stageIdx, 'ko_3rd', totalRounds + 1, 1, 'TBD', 'TBD', bestOf)]
+    });
+  }
+
+  propagateKnockoutWinners(rounds);
+  return rounds;
+}
+
+function createMatchObject(stageIdx, groupId, roundIndex, order, pA, pB, bestOf) {
+  return {
+    id: `m_${stageIdx}_${groupId}_${roundIndex}_${order}_${Math.random().toString(36).slice(2, 6)}`,
+    stageIdx,
+    groupId,
+    roundIndex,
+    order,
+    competitorAId: pA,
+    competitorBId: pB,
+    bestOf: bestOf || 5,
+    scoreA: 0,
+    scoreB: 0,
+    gameScores: [], // [{ a: 11, b: 8 }, ...]
+    teamSubMatches: [],
+    winnerId: null,
+    isWalkover: false,
+    status: 'PENDING' // 'PENDING' | 'FINISHED' | 'WALKOVER' | 'BYE_WIN'
+  };
+}
+
+// 淘汰赛胜者自动向上一轮推进（以及半决赛负者进入三四名决赛）
+function propagateKnockoutWinners(rounds) {
+  const mainRounds = rounds.filter(r => !r.isThirdPlace);
+  const thirdRound = rounds.find(r => r.isThirdPlace);
+
+  for (let r = 0; r < mainRounds.length - 1; r++) {
+    const currMatches = mainRounds[r].matches;
+    const nextMatches = mainRounds[r + 1].matches;
+
+    currMatches.forEach((m, idx) => {
+      const nextMatch = nextMatches[Math.floor(idx / 2)];
+      const isTopSlot = idx % 2 === 0;
+      const winner = m.winnerId || 'TBD';
+      if (isTopSlot) {
+        nextMatch.competitorAId = winner;
+      } else {
+        nextMatch.competitorBId = winner;
+      }
+    });
+  }
+
+  // 半决赛负者自动进入三四名决赛
+  if (thirdRound && mainRounds.length >= 2) {
+    const semiMatches = mainRounds[mainRounds.length - 2].matches;
+    if (semiMatches.length === 2) {
+      const loser1 = getMatchLoserId(semiMatches[0]) || 'TBD';
+      const loser2 = getMatchLoserId(semiMatches[1]) || 'TBD';
+      thirdRound.matches[0].competitorAId = loser1;
+      thirdRound.matches[0].competitorBId = loser2;
+    }
+  }
+}
+
+function getMatchLoserId(m) {
+  if (!m.winnerId) return null;
+  if (m.winnerId === m.competitorAId) return m.competitorBId !== 'BYE' ? m.competitorBId : null;
+  if (m.winnerId === m.competitorBId) return m.competitorAId !== 'BYE' ? m.competitorAId : null;
+  return null;
+}
+
+/**
+ * ============================================================================
+ * 5. 国际乒联 (ITTF) 循环赛积分与同分连环套计算引擎 + 人工排名覆写
+ * ============================================================================
+ */
+function calculateGroupStandings(group) {
+  const stats = {};
+  group.competitorIds.forEach(id => {
+    stats[id] = {
+      competitorId: id,
+      played: 0,
+      wins: 0,
+      losses: 0,
+      walkovers: 0,
+      points: 0, // 胜2分，负1分，弃权0分
+      gamesWon: 0,
+      gamesLost: 0,
+      ptsWon: 0,
+      ptsLost: 0
+    };
+  });
+
+  const finishedMatches = group.matches.filter(m => m.status === 'FINISHED' || m.status === 'WALKOVER');
+
+  finishedMatches.forEach(m => {
+    const a = stats[m.competitorAId];
+    const b = stats[m.competitorBId];
+    if (!a || !b) return;
+
+    a.played++;
+    b.played++;
+    a.gamesWon += Number(m.scoreA) || 0;
+    a.gamesLost += Number(m.scoreB) || 0;
+    b.gamesWon += Number(m.scoreB) || 0;
+    b.gamesLost += Number(m.scoreA) || 0;
+
+    if (m.gameScores && m.gameScores.length > 0) {
+      m.gameScores.forEach(g => {
+        a.ptsWon += Number(g.a) || 0;
+        a.ptsLost += Number(g.b) || 0;
+        b.ptsWon += Number(g.b) || 0;
+        b.ptsLost += Number(g.a) || 0;
+      });
+    }
+
+    if (m.winnerId === m.competitorAId) {
+      a.wins++;
+      a.points += 2;
+      b.losses++;
+      if (m.isWalkover) {
+        b.walkovers++; // 弃权得0分
+      } else {
+        b.points += 1;
+      }
+    } else if (m.winnerId === m.competitorBId) {
+      b.wins++;
+      b.points += 2;
+      a.losses++;
+      if (m.isWalkover) {
+        a.walkovers++;
+      } else {
+        a.points += 1;
+      }
+    }
+  });
+
+  let rows = Object.values(stats);
+
+  // 如果用户已经手动调整锁定了该组名次顺序，优先按用户的 manualOrder 排列
+  if (group.manualOrder && group.manualOrder.length === group.competitorIds.length) {
+    rows.sort((x, y) => group.manualOrder.indexOf(x.competitorId) - group.manualOrder.indexOf(y.competitorId));
+  } else {
+    // 自动按国际乒联规则排序：先比总积分，同分群体内部比相互战绩（积分 -> 胜负局比 -> 胜负小分比），再比全组净胜局
+    rows = resolveITTFStandingsOrder(rows, finishedMatches);
+  }
+
+  const stageObj = state.runtimeStages.find(s => s.groups && s.groups.some(g => g.id === group.id));
+  const advanceLimit = stageObj ? (stageObj.advancePerGroup || 2) : 2;
+
+  rows.forEach((r, idx) => {
+    r.rank = idx + 1;
+    if (group.manualAdvance && typeof group.manualAdvance[r.competitorId] === 'boolean') {
+      r.isAdvanced = group.manualAdvance[r.competitorId];
+    } else {
+      r.isAdvanced = idx < advanceLimit;
+    }
+  });
+
+  return rows;
+}
+
+// ITTF 同分连环套破平算法
+function resolveITTFStandingsOrder(rows, finishedMatches) {
+  // 按积分分组
+  const byPoints = {};
+  rows.forEach(r => {
+    byPoints[r.points] = byPoints[r.points] || [];
+    byPoints[r.points].push(r);
+  });
+
+  const sortedPoints = Object.keys(byPoints).map(Number).sort((a, b) => b - a);
+  const finalResult = [];
+
+  sortedPoints.forEach(pt => {
+    const tiedGroup = byPoints[pt];
+    if (tiedGroup.length === 1) {
+      finalResult.push(tiedGroup[0]);
+    } else {
+      const tiedIds = new Set(tiedGroup.map(r => r.competitorId));
+      // 仅提取同分选手之间的相互交手记录
+      const h2hMatches = finishedMatches.filter(m => tiedIds.has(m.competitorAId) && tiedIds.has(m.competitorBId));
+      const h2hStats = {};
+      tiedGroup.forEach(r => {
+        h2hStats[r.competitorId] = { pts: 0, gw: 0, gl: 0, pw: 0, pl: 0 };
+      });
+      h2hMatches.forEach(m => {
+        const ha = h2hStats[m.competitorAId];
+        const hb = h2hStats[m.competitorBId];
+        ha.gw += Number(m.scoreA) || 0;
+        ha.gl += Number(m.scoreB) || 0;
+        hb.gw += Number(m.scoreB) || 0;
+        hb.gl += Number(m.scoreA) || 0;
+        (m.gameScores || []).forEach(g => {
+          ha.pw += Number(g.a) || 0;
+          ha.pl += Number(g.b) || 0;
+          hb.pw += Number(g.b) || 0;
+          hb.pl += Number(g.a) || 0;
+        });
+        if (m.winnerId === m.competitorAId) {
+          ha.pts += 2;
+          hb.pts += m.isWalkover ? 0 : 1;
+        } else if (m.winnerId === m.competitorBId) {
+          hb.pts += 2;
+          ha.pts += m.isWalkover ? 0 : 1;
+        }
+      });
+
+      tiedGroup.sort((a, b) => {
+        const ha = h2hStats[a.competitorId];
+        const hb = h2hStats[b.competitorId];
+        // 1. 相互间积分
+        if (hb.pts !== ha.pts) return hb.pts - ha.pts;
+        // 2. 相互间局数胜负比
+        const ratioGA = ha.gl === 0 ? (ha.gw > 0 ? 999 : 0) : ha.gw / ha.gl;
+        const ratioGB = hb.gl === 0 ? (hb.gw > 0 ? 999 : 0) : hb.gw / hb.gl;
+        if (Math.abs(ratioGB - ratioGA) > 1e-6) return ratioGB - ratioGA;
+        // 3. 相互间小分胜负比
+        const ratioPA = ha.pl === 0 ? (ha.pw > 0 ? 999 : 0) : ha.pw / ha.pl;
+        const ratioPB = hb.pl === 0 ? (hb.pw > 0 ? 999 : 0) : hb.pw / hb.pl;
+        if (Math.abs(ratioPB - ratioPA) > 1e-6) return ratioPB - ratioPA;
+        // 4. 全组总净胜局
+        const totalDiffA = a.gamesWon - a.gamesLost;
+        const totalDiffB = b.gamesWon - b.gamesLost;
+        return totalDiffB - totalDiffA;
+      });
+
+      finalResult.push(...tiedGroup);
+    }
+  });
+
+  return finalResult;
+}
+
+/**
+ * ============================================================================
+ * 6. 视图渲染：阶段页签 + 小组九宫格交叉表 + 淘汰赛晋级树 + 最终总排名
+ * ============================================================================
+ */
+function renderStageTabs() {
+  const tabContainer = document.getElementById('stageTabs');
+  tabContainer.innerHTML = '';
+
+  state.runtimeStages.forEach((stg, idx) => {
+    const tabKey = `stage_${idx}`;
+    const isActive = state.activeTab === tabKey;
+    const btn = document.createElement('button');
+    btn.className = isActive
+      ? 'px-4 py-1.5 rounded text-xs font-bold bg-zinc-900 text-white shadow-2xs'
+      : 'px-4 py-1.5 rounded text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-700';
+    btn.textContent = stg.name;
+    btn.onclick = () => {
+      state.activeTab = tabKey;
+      saveState();
+      renderStageTabs();
+      renderMainViewport();
+    };
+    tabContainer.appendChild(btn);
+  });
+
+  // 最终总排名与积分榜页签
+  const isFinal = state.activeTab === 'FINAL_RANKING';
+  const finalBtn = document.createElement('button');
+  finalBtn.className = isFinal
+    ? 'px-4 py-1.5 rounded text-xs font-bold bg-orange-600 text-white shadow-2xs'
+    : 'px-4 py-1.5 rounded text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-900';
+  finalBtn.textContent = '🏆 最终总排名与战报';
+  finalBtn.onclick = () => {
+    state.activeTab = 'FINAL_RANKING';
+    saveState();
+    renderStageTabs();
+    renderMainViewport();
+  };
+  tabContainer.appendChild(finalBtn);
+
+  // 控制“推进至下一阶段”按钮显隐
+  const advBtn = document.getElementById('advanceStageBtn');
+  const currStageIdx = state.activeTab.startsWith('stage_') ? Number(state.activeTab.split('_')[1]) : -1;
+  if (currStageIdx >= 0 && currStageIdx < state.runtimeStages.length - 1) {
+    advBtn.classList.remove('hidden');
+    advBtn.textContent = `推进本阶段晋级者至【阶段 ${currStageIdx + 2}】 →`;
+  } else {
+    advBtn.classList.add('hidden');
+  }
+}
+
+function renderMainViewport() {
+  const viewport = document.getElementById('mainStageViewport');
+  viewport.innerHTML = '';
+
+  if (state.activeTab === 'FINAL_RANKING') {
+    renderFinalRankingView(viewport);
+    return;
+  }
+
+  const currStageIdx = Number(state.activeTab.split('_')[1] || 0);
+  const stageObj = state.runtimeStages[currStageIdx];
+  if (!stageObj) {
+    viewport.innerHTML = `<div class="text-center py-20 text-zinc-400">请点击左侧【一键生成 / 重新排赛】</div>`;
+    return;
+  }
+
+  if (stageObj.type === 'GROUP_ROUND_ROBIN' || stageObj.type === 'FULL_ROUND_ROBIN') {
+    renderRoundRobinStage(viewport, stageObj);
+  } else {
+    renderKnockoutStage(viewport, stageObj);
+  }
+}
+
+// 渲染小组循环赛 / 大循环视图（含经典乒乓球斜线九宫格 + 实时积分排名 + 自由调组/插人/强改名次）
+function renderRoundRobinStage(viewport, stageObj) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'space-y-8';
+
+  stageObj.groups.forEach((group, gIdx) => {
+    const standings = calculateGroupStandings(group);
+    const card = document.createElement('div');
+    card.className = 'bg-white border border-zinc-300 rounded-lg shadow-2xs overflow-hidden';
+
+    // 小组头部操作栏
+    const header = document.createElement('div');
+    header.className = 'bg-zinc-900 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-2';
+    header.innerHTML = `
+      <div class="flex items-center gap-3">
+        <span class="font-extrabold text-sm text-orange-400">${escapeHtml(group.name)}</span>
+        <span class="text-xs text-zinc-400">(${group.competitorIds.length}人，共 ${group.matches.length} 场，打勾代表晋级)</span>
+        ${group.manualOrder ? `<span class="text-[11px] bg-amber-500 text-black font-bold px-2 py-0.5 rounded">已人工锁定名次</span>` : ''}
+      </div>
+      ${state.freeEditMode ? `
+        <div class="flex items-center gap-2">
+          ${group.manualOrder ? `<button onclick="unlockGroupManualOrder(${stageObj.index}, ${gIdx})" class="text-xs bg-zinc-700 hover:bg-zinc-600 px-2.5 py-1 rounded">恢复自动算分排名</button>` : ''}
+          <button onclick="promptAddLatePlayerToGroup(${stageObj.index}, ${gIdx})" class="text-xs bg-orange-600 hover:bg-orange-500 px-2.5 py-1 rounded font-bold">+ 临时加人入本组 (保留已有比分)</button>
+        </div>
+      ` : ''}
+    `;
+    card.appendChild(header);
+
+    // 九宫格交叉表 + 积分排名合并大表
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'overflow-x-auto p-4';
+
+    const colHeaders = group.competitorIds.map((id, i) => `
+      <th class="border border-zinc-300 bg-zinc-100 px-2 py-2 text-xs font-bold text-center min-w-[78px]">
+        <div class="text-[10px] text-zinc-400">${i + 1}</div>
+        <div class="truncate max-w-[90px] mx-auto">${escapeHtml(getCompetitorName(id))}</div>
+      </th>
+    `).join('');
+
+    const bodyRows = group.competitorIds.map((rowCompId, rIdx) => {
+      const cells = group.competitorIds.map((colCompId, cIdx) => {
+        if (rowCompId === colCompId) {
+          return `<td class="border border-zinc-300 cross-cell-diagonal"></td>`;
+        }
+        const match = findGroupMatchBetween(group, rowCompId, colCompId);
+        if (!match) {
+          return `<td class="border border-zinc-300 text-center text-xs text-zinc-300">-</td>`;
+        }
+        const isRowA = match.competitorAId === rowCompId;
+        const sRow = isRowA ? match.scoreA : match.scoreB;
+        const sCol = isRowA ? match.scoreB : match.scoreA;
+        const isDone = match.status === 'FINISHED' || match.status === 'WALKOVER';
+        const didRowWin = match.winnerId === rowCompId;
+
+        return `
+          <td onclick="openScoreModal(${stageObj.index}, '${match.id}')" 
+              class="border border-zinc-300 text-center px-2 py-2.5 cursor-pointer hover:bg-orange-50 transition ${isDone ? (didRowWin ? 'bg-emerald-50/60' : 'bg-red-50/40') : ''}"
+              title="点击录入或修改比分">
+            ${isDone ? `
+              <div class="font-mono font-extrabold text-sm ${didRowWin ? 'text-emerald-700' : 'text-zinc-600'}">
+                ${sRow} : ${sCol}
+              </div>
+              ${match.isWalkover ? `<div class="text-[10px] text-amber-600 font-bold">W.O.</div>` : ''}
+            ` : `
+              <span class="text-[11px] text-zinc-400 hover:text-orange-600 font-medium">记分</span>
+            `}
+          </td>
+        `;
+      }).join('');
+
+      const st = standings.find(s => s.competitorId === rowCompId);
+      const otherGroupOptions = stageObj.groups
+        .map((g, idx) => idx !== gIdx ? `<option value="${idx}">调至 ${g.name}</option>` : '')
+        .join('');
+
+      return `
+        <tr class="hover:bg-zinc-50/80">
+          <td class="border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs font-bold whitespace-nowrap">
+            <div class="flex items-center justify-between gap-2">
+              <div>
+                <span class="inline-block w-4 text-zinc-400 font-mono">${rIdx + 1}.</span>
+                <span class="cursor-pointer hover:text-orange-600" onclick="promptRenameCompetitor('${rowCompId}')">${escapeHtml(getCompetitorName(rowCompId))}</span>
+              </div>
+              ${state.freeEditMode && stageObj.groups.length > 1 ? `
+                <select onchange="movePlayerToAnotherGroup(${stageObj.index}, ${gIdx}, '${rowCompId}', Number(this.value))" class="text-[10px] border border-zinc-300 rounded px-1 py-0.5 bg-white text-zinc-600">
+                  <option value="">换组...</option>
+                  ${otherGroupOptions}
+                </select>
+              ` : ''}
+            </div>
+          </td>
+          ${cells}
+          <td class="border border-zinc-300 text-center font-mono text-xs font-bold bg-zinc-50">${st.wins}胜 ${st.losses}负</td>
+          <td class="border border-zinc-300 text-center font-mono text-sm font-black text-orange-600 bg-orange-50/30">${st.points}</td>
+          <td class="border border-zinc-300 text-center font-mono text-xs text-zinc-600 bg-zinc-50">${st.gamesWon}:${st.gamesLost}</td>
+          <td class="border border-zinc-300 text-center bg-zinc-50 px-2">
+            <div class="flex items-center justify-center gap-1">
+              <span class="inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black ${st.rank <= stageObj.advancePerGroup ? 'bg-emerald-600 text-white' : 'bg-zinc-200 text-zinc-700'}">
+                ${st.rank}
+              </span>
+              ${state.freeEditMode ? `
+                <div class="flex flex-col text-[10px] leading-none">
+                  <button onclick="nudgeManualRank(${stageObj.index}, ${gIdx}, '${rowCompId}', -1)" class="hover:text-orange-600 px-1" title="强行上调名次">▲</button>
+                  <button onclick="nudgeManualRank(${stageObj.index}, ${gIdx}, '${rowCompId}', 1)" class="hover:text-orange-600 px-1" title="强行下调名次">▼</button>
+                </div>
+              ` : ''}
+            </div>
+          </td>
+          <td class="border border-zinc-300 text-center bg-zinc-50">
+            <input type="checkbox" ${st.isAdvanced ? 'checked' : ''} 
+              onchange="toggleManualAdvance(${stageObj.index}, ${gIdx}, '${rowCompId}', this.checked)"
+              class="accent-emerald-600 w-4 h-4 cursor-pointer" title="勾选/取消晋级下一阶段资格">
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tableWrap.innerHTML = `
+      <table class="w-full border-collapse">
+        <thead>
+          <tr>
+            <th class="border border-zinc-300 bg-zinc-100 px-3 py-2 text-left text-xs font-bold min-w-[150px]">选手 / 交叉对阵</th>
+            ${colHeaders}
+            <th class="border border-zinc-300 bg-zinc-100 px-2 py-2 text-xs font-bold w-20">战绩</th>
+            <th class="border border-zinc-300 bg-zinc-100 px-2 py-2 text-xs font-bold w-16">积分</th>
+            <th class="border border-zinc-300 bg-zinc-100 px-2 py-2 text-xs font-bold w-20">胜负局</th>
+            <th class="border border-zinc-300 bg-zinc-100 px-2 py-2 text-xs font-bold w-20">小组名次</th>
+            <th class="border border-zinc-300 bg-zinc-100 px-2 py-2 text-xs font-bold w-14">晋级</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${bodyRows}
+        </tbody>
+      </table>
+    `;
+    card.appendChild(tableWrap);
+
+    // 底部轮次对阵清单折叠/展开区
+    const matchListFooter = document.createElement('div');
+    matchListFooter.className = 'bg-zinc-50 border-t border-zinc-200 px-4 py-3';
+    matchListFooter.innerHTML = `
+      <div class="text-xs font-bold text-zinc-500 mb-2">本组对阵顺序列表 (点击任意场次卡片也可直接记分)：</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+        ${group.matches.map(m => renderCompactMatchCard(stageObj.index, m)).join('')}
+      </div>
+    `;
+    card.appendChild(matchListFooter);
+
+    wrapper.appendChild(card);
+  });
+
+  viewport.appendChild(wrapper);
+}
+
+function renderCompactMatchCard(stageIdx, m) {
+  const isDone = m.status === 'FINISHED' || m.status === 'WALKOVER';
+  const nameA = getCompetitorName(m.competitorAId);
+  const nameB = getCompetitorName(m.competitorBId);
+  return `
+    <div onclick="openScoreModal(${stageIdx}, '${m.id}')" 
+         class="border ${isDone ? 'border-emerald-300 bg-white' : 'border-zinc-300 bg-white'} hover:border-orange-500 rounded px-3 py-2 cursor-pointer flex items-center justify-between text-xs shadow-2xs transition">
+      <div class="truncate flex-1 ${m.winnerId === m.competitorAId ? 'font-bold text-emerald-700' : ''}">${escapeHtml(nameA)}</div>
+      <div class="px-2 font-mono font-bold ${isDone ? 'text-zinc-900' : 'text-zinc-400'}">
+        ${isDone ? `${m.scoreA} : ${m.scoreB}` : 'VS'}
+      </div>
+      <div class="truncate flex-1 text-right ${m.winnerId === m.competitorBId ? 'font-bold text-emerald-700' : ''}">${escapeHtml(nameB)}</div>
+    </div>
+  `;
+}
+
+// 渲染单败淘汰赛树状图视图 (支持自由更换签位选手 + 点击记分)
+function renderKnockoutStage(viewport, stageObj) {
+  if (!stageObj.knockoutRounds || stageObj.knockoutRounds.length === 0) {
+    viewport.innerHTML = `
+      <div class="bg-white border border-zinc-300 rounded-lg p-12 text-center space-y-3">
+        <div class="text-sm text-zinc-500">本阶段淘汰赛尚未导入晋级选手。</div>
+        <button onclick="populateKnockoutFromAllCompetitors(${stageObj.index})" class="bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold px-4 py-2 rounded">
+          直接用当前全部选手生成淘汰赛签表
+        </button>
+      </div>
+    `;
+    return;
+  }
+
+  const container = document.createElement('div');
+  container.className = 'bg-white border border-zinc-300 rounded-lg p-6 overflow-x-auto';
+
+  const treeFlex = document.createElement('div');
+  treeFlex.className = 'flex items-stretch gap-8 min-w-max';
+
+  stageObj.knockoutRounds.forEach(round => {
+    const col = document.createElement('div');
+    col.className = 'w-64 flex flex-col';
+
+    const header = document.createElement('div');
+    header.className = `text-xs font-extrabold uppercase tracking-wider px-3 py-2 rounded mb-4 text-center ${round.isThirdPlace ? 'bg-amber-100 text-amber-900' : 'bg-zinc-900 text-white'}`;
+    header.textContent = round.name;
+    col.appendChild(header);
+
+    const matchesCol = document.createElement('div');
+    matchesCol.className = 'flex-1 flex flex-col justify-around gap-4';
+
+    round.matches.forEach(m => {
+      const card = document.createElement('div');
+      const isDone = m.status === 'FINISHED' || m.status === 'WALKOVER' || m.status === 'BYE_WIN';
+      card.className = `border-2 ${isDone ? 'border-zinc-400' : 'border-zinc-300'} hover:border-orange-500 rounded-md bg-white shadow-xs overflow-hidden transition`;
+
+      card.innerHTML = `
+        <div class="bg-zinc-100 px-2.5 py-1 text-[10px] text-zinc-500 flex items-center justify-between border-b border-zinc-200">
+          <span>场次 #${m.order}</span>
+          <button onclick="openScoreModal(${stageObj.index}, '${m.id}')" class="text-orange-600 hover:underline font-bold">
+            ${isDone ? '修改比分/换人' : '点击记分/换签'}
+          </button>
+        </div>
+        <div onclick="openScoreModal(${stageObj.index}, '${m.id}')" class="divide-y divide-zinc-200 cursor-pointer">
+          <div class="px-3 py-2 flex items-center justify-between text-xs ${m.winnerId === m.competitorAId ? 'bg-emerald-50 font-bold text-emerald-900' : ''}">
+            <span class="truncate pr-2">${escapeHtml(getCompetitorName(m.competitorAId))}</span>
+            <span class="font-mono font-bold">${m.status === 'BYE_WIN' ? '-' : (isDone ? m.scoreA : '')}</span>
+          </div>
+          <div class="px-3 py-2 flex items-center justify-between text-xs ${m.winnerId === m.competitorBId ? 'bg-emerald-50 font-bold text-emerald-900' : ''}">
+            <span class="truncate pr-2">${escapeHtml(getCompetitorName(m.competitorBId))}</span>
+            <span class="font-mono font-bold">${m.status === 'BYE_WIN' ? '-' : (isDone ? m.scoreB : '')}</span>
+          </div>
+        </div>
+      `;
+      matchesCol.appendChild(card);
+    });
+
+    col.appendChild(matchesCol);
+    treeFlex.appendChild(col);
+  });
+
+  container.appendChild(treeFlex);
+  viewport.appendChild(container);
+}
+
+function populateKnockoutFromAllCompetitors(stageIdx) {
+  const stageObj = state.runtimeStages[stageIdx];
+  populateStageWithCompetitors(stageObj, state.competitors.map(c => c.id));
+  saveState();
+  renderMainViewport();
+}
+
+/**
+ * ============================================================================
+ * 7. 高自由度人工干预操作 (跨组调人、中途加人、强行锁定名次、跨阶段推进)
+ * ============================================================================
+ */
+// 跨组调人
+function movePlayerToAnotherGroup(stageIdx, fromGroupIdx, compId, toGroupIdx) {
+  if (isNaN(toGroupIdx) || fromGroupIdx === toGroupIdx) return;
+  const stageObj = state.runtimeStages[stageIdx];
+  const fromGroup = stageObj.groups[fromGroupIdx];
+  const toGroup = stageObj.groups[toGroupIdx];
+
+  fromGroup.competitorIds = fromGroup.competitorIds.filter(id => id !== compId);
+  fromGroup.matches = fromGroup.matches.filter(m => m.competitorAId !== compId && m.competitorBId !== compId);
+  fromGroup.manualOrder = null;
+
+  if (!toGroup.competitorIds.includes(compId)) {
+    // 为新加入该组的选手增量补充与该组现有人员的比赛，不清空该组已有比分
+    const existingIds = [...toGroup.competitorIds];
+    toGroup.competitorIds.push(compId);
+    existingIds.forEach(otherId => {
+      toGroup.matches.push(
+        createMatchObject(stageIdx, toGroup.id, 99, toGroup.matches.length + 1, compId, otherId, stageObj.bestOf)
+      );
+    });
+    toGroup.manualOrder = null;
+  }
+
+  saveState();
+  renderMainViewport();
+}
+
+// 比赛打了一半临时加人进入某小组 (保留该组已打完的所有比分)
+function promptAddLatePlayerToGroup(stageIdx, groupIdx) {
+  const name = prompt('请输入临时新加入本组的选手/队伍名称：');
+  if (!name || !name.trim()) return;
+
+  const newComp = {
+    id: 'comp_late_' + Date.now(),
+    name: name.trim(),
+    members: [name.trim()],
+    seed: state.competitors.length + 1
+  };
+  state.competitors.push(newComp);
+
+  const stageObj = state.runtimeStages[stageIdx];
+  const group = stageObj.groups[groupIdx];
+  const existingIds = [...group.competitorIds];
+  group.competitorIds.push(newComp.id);
+
+  existingIds.forEach(otherId => {
+    group.matches.push(
+      createMatchObject(stageIdx, group.id, 99, group.matches.length + 1, newComp.id, otherId, stageObj.bestOf)
+    );
+  });
+  group.manualOrder = null;
+
+  saveState();
+  renderCompetitorCapsules();
+  renderMainViewport();
+}
+
+// 强行上下调整某人在小组内的排名 (无视算法)
+function nudgeManualRank(stageIdx, groupIdx, compId, delta) {
+  const group = state.runtimeStages[stageIdx].groups[groupIdx];
+  const currentStandings = calculateGroupStandings(group);
+  const order = currentStandings.map(s => s.competitorId);
+  const idx = order.indexOf(compId);
+  const target = idx + delta;
+  if (idx === -1 || target < 0 || target >= order.length) return;
+
+  const tmp = order[idx];
+  order[idx] = order[target];
+  order[target] = tmp;
+  group.manualOrder = order;
+
+  saveState();
+  renderMainViewport();
+}
+
+function unlockGroupManualOrder(stageIdx, groupIdx) {
+  state.runtimeStages[stageIdx].groups[groupIdx].manualOrder = null;
+  saveState();
+  renderMainViewport();
+}
+
+// 手动勾选或取消某人的晋级资格
+function toggleManualAdvance(stageIdx, groupIdx, compId, checked) {
+  const group = state.runtimeStages[stageIdx].groups[groupIdx];
+  group.manualAdvance = group.manualAdvance || {};
+  group.manualAdvance[compId] = checked;
+  saveState();
+  renderMainViewport();
+}
+
+// 将当前阶段勾选了“晋级”的选手推进到下一阶段（小组第1与第2交叉排入淘汰赛）
+function advanceToNextStage() {
+  const currStageIdx = Number(state.activeTab.split('_')[1] || 0);
+  const currStage = state.runtimeStages[currStageIdx];
+  const nextStage = state.runtimeStages[currStageIdx + 1];
+  if (!currStage || !nextStage) return;
+
+  let advancingIds = [];
+  if (currStage.type === 'GROUP_ROUND_ROBIN' || currStage.type === 'FULL_ROUND_ROBIN') {
+    // 按名次分层提取（所有小组第1名排前面，第2名反向交叉排后面，实现同组上下半区分离）
+    const groupStandings = currStage.groups.map(g => calculateGroupStandings(g).filter(r => r.isAdvanced));
+    const maxRankTier = Math.max(0, ...groupStandings.map(list => list.length));
+
+    for (let tier = 0; tier < maxRankTier; tier++) {
+      const tierPlayers = [];
+      groupStandings.forEach(list => {
+        if (list[tier]) tierPlayers.push(list[tier].competitorId);
+      });
+      if (tier % 2 === 1) tierPlayers.reverse(); // 小组第二名逆序交叉，规避同组首轮相遇
+      advancingIds.push(...tierPlayers);
+    }
+  } else if (currStage.type === 'KNOCKOUT') {
+    const mainRounds = currStage.knockoutRounds.filter(r => !r.isThirdPlace);
+    const lastRound = mainRounds[mainRounds.length - 1];
+    if (lastRound) {
+      lastRound.matches.forEach(m => {
+        if (m.winnerId) advancingIds.push(m.winnerId);
+      });
+    }
+  }
+
+  if (advancingIds.length < 2) {
+    alert('当前阶段勾选晋级的选手不足 2 人，请检查晋级勾选项！');
+    return;
+  }
+
+  populateStageWithCompetitors(nextStage, advancingIds);
+  state.activeTab = `stage_${currStageIdx + 1}`;
+  saveState();
+  renderStageTabs();
+  renderMainViewport();
+}
+
+// 手动新建一场自定义比赛
+function openAddCustomMatchModal() {
+  const currStageIdx = state.activeTab.startsWith('stage_') ? Number(state.activeTab.split('_')[1]) : 0;
+  const stageObj = state.runtimeStages[currStageIdx];
+  if (!stageObj || state.competitors.length < 2) return;
+
+  const pA = state.competitors[0].id;
+  const pB = state.competitors[1].id;
+
+  if (stageObj.type === 'KNOCKOUT') {
+    if (!stageObj.knockoutRounds.length) {
+      stageObj.knockoutRounds.push({ roundIndex: 0, name: '自定义轮次', matches: [] });
+    }
+    const targetRound = stageObj.knockoutRounds[stageObj.knockoutRounds.length - 1];
+    const m = createMatchObject(currStageIdx, 'custom', 1, targetRound.matches.length + 1, pA, pB, stageObj.bestOf);
+    targetRound.matches.push(m);
+    saveState();
+    renderMainViewport();
+    openScoreModal(currStageIdx, m.id);
+  } else {
+    const g = stageObj.groups[0];
+    const m = createMatchObject(currStageIdx, g.id, 99, g.matches.length + 1, pA, pB, stageObj.bestOf);
+    g.matches.push(m);
+    saveState();
+    renderMainViewport();
+    openScoreModal(currStageIdx, m.id);
+  }
+}
+
+/**
+ * ============================================================================
+ * 8. 记分模态框 & 全屏球台实时记分牌
+ * ============================================================================
+ */
+function findMatchById(stageIdx, matchId) {
+  const stg = state.runtimeStages[stageIdx];
+  if (!stg) return null;
+  if (stg.groups) {
+    for (const g of stg.groups) {
+      const m = g.matches.find(x => x.id === matchId);
+      if (m) return m;
+    }
+  }
+  if (stg.knockoutRounds) {
+    for (const r of stg.knockoutRounds) {
+      const m = r.matches.find(x => x.id === matchId);
+      if (m) return m;
+    }
+  }
+  return null;
+}
+
+function findGroupMatchBetween(group, id1, id2) {
+  return group.matches.find(
+    m => (m.competitorAId === id1 && m.competitorBId === id2) || (m.competitorAId === id2 && m.competitorBId === id1)
+  );
+}
+
+function openScoreModal(stageIdx, matchId) {
+  const match = findMatchById(stageIdx, matchId);
+  if (!match) return;
+  activeMatchCtx = { stageIdx, matchId };
+
+  document.getElementById('modalBestOfBadge').textContent = `${match.bestOf}局${Math.ceil(match.bestOf / 2)}胜`;
+
+  // 渲染选手下拉框（允许随时换对手或设为轮空）
+  const optionsHtml = [
+    ...state.competitors.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`),
+    `<option value="BYE">轮空 (BYE)</option>`,
+    `<option value="TBD">待定 (TBD)</option>`
+  ].join('');
+
+  const selA = document.getElementById('modalPlayerASelect');
+  const selB = document.getElementById('modalPlayerBSelect');
+  selA.innerHTML = optionsHtml;
+  selB.innerHTML = optionsHtml;
+  selA.value = match.competitorAId;
+  selB.value = match.competitorBId;
+
+  document.getElementById('modalBigScoreA').value = match.scoreA || 0;
+  document.getElementById('modalBigScoreB').value = match.scoreB || 0;
+
+  // 生成极速比分按钮 (如五局三胜提供 3:0, 3:1, 3:2, 0:3, 1:3, 2:3)
+  const targetWins = Math.ceil(match.bestOf / 2);
+  const quickBtns = [];
+  for (let l = 0; l < targetWins; l++) quickBtns.push([targetWins, l]);
+  for (let l = 0; l < targetWins; l++) quickBtns.push([l, targetWins]);
+
+  document.getElementById('quickScoreButtons').innerHTML = quickBtns.map(([sa, sb]) => `
+    <button onclick="applyQuickScore(${sa}, ${sb})" class="px-3.5 py-1.5 rounded border border-zinc-300 bg-zinc-50 hover:bg-orange-600 hover:text-white hover:border-orange-600 font-mono text-xs font-extrabold transition">
+      ${sa} : ${sb}
+    </button>
+  `).join('');
+
+  // 生成各局小分输入框
+  const gamesContainer = document.getElementById('gameScoresInputs');
+  gamesContainer.innerHTML = '';
+  for (let i = 0; i < match.bestOf; i++) {
+    const g = match.gameScores[i] || { a: '', b: '' };
+    gamesContainer.innerHTML += `
+      <div class="bg-zinc-50 border border-zinc-200 rounded p-2 text-center">
+        <div class="text-[10px] text-zinc-400 mb-1">第 ${i + 1} 局</div>
+        <div class="flex items-center justify-center gap-1 font-mono text-xs">
+          <input type="number" id="g_${i}_a" value="${g.a}" placeholder="A" oninput="recalcBigScoreFromGames(${match.bestOf})" class="w-10 text-center border border-zinc-300 rounded py-0.5">
+          <span>:</span>
+          <input type="number" id="g_${i}_b" value="${g.b}" placeholder="B" oninput="recalcBigScoreFromGames(${match.bestOf})" class="w-10 text-center border border-zinc-300 rounded py-0.5">
+        </div>
+      </div>
+    `;
+  }
+
+  // 若为团体赛，显示各盘明细录入
+  const teamSection = document.getElementById('teamSubMatchesSection');
+  if (state.matchType === 'TEAM') {
+    teamSection.classList.remove('hidden');
+    renderTeamSubMatchesEditor(match);
+  } else {
+    teamSection.classList.add('hidden');
+  }
+
+  const modal = document.getElementById('scoreModal');
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+}
+
+function renderTeamSubMatchesEditor(match) {
+  const labels = state.teamFormat === 'OLYMPIC_5'
+    ? ['第一盘 (双打)', '第二盘 (一单)', '第三盘 (二单)', '第四盘 (一单/三单)', '第五盘 (决胜单打)']
+    : (state.teamFormat === 'CUSTOM_3' ? ['第一盘 (单打)', '第二盘 (双打)', '第三盘 (单打)'] : ['第一盘 (单)', '第二盘 (单)', '第三盘 (单)', '第四盘 (单)', '第五盘 (单)']);
+
+  const list = document.getElementById('teamSubMatchesList');
+  list.innerHTML = labels.map((label, idx) => {
+    const sub = (match.teamSubMatches && match.teamSubMatches[idx]) || { pA: '', pB: '', sA: '', sB: '' };
+    return `
+      <div class="grid grid-cols-12 gap-2 items-center text-xs bg-zinc-50 p-2 rounded border border-zinc-200">
+        <span class="col-span-3 font-bold text-zinc-600">${label}</span>
+        <input id="sub_${idx}_pA" type="text" value="${escapeHtml(sub.pA)}" placeholder="主队上场队员" class="col-span-3 border border-zinc-300 rounded px-2 py-1 bg-white">
+        <div class="col-span-3 flex items-center justify-center gap-1 font-mono">
+          <input id="sub_${idx}_sA" type="number" value="${sub.sA}" placeholder="0" class="w-10 text-center border border-zinc-300 rounded py-1 bg-white">
+          <span>:</span>
+          <input id="sub_${idx}_sB" type="number" value="${sub.sB}" placeholder="0" class="w-10 text-center border border-zinc-300 rounded py-1 bg-white">
+        </div>
+        <input id="sub_${idx}_pB" type="text" value="${escapeHtml(sub.pB)}" placeholder="客队上场队员" class="col-span-3 border border-zinc-300 rounded px-2 py-1 bg-white">
+      </div>
+    `;
+  }).join('');
+}
+
+function changeMatchCompetitor(side, newCompId) {
+  if (!activeMatchCtx) return;
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  if (!match) return;
+  if (side === 'A') match.competitorAId = newCompId;
+  if (side === 'B') match.competitorBId = newCompId;
+}
+
+function recalcBigScoreFromGames(bestOf) {
+  let wa = 0, wb = 0;
+  for (let i = 0; i < bestOf; i++) {
+    const va = document.getElementById(`g_${i}_a`).value;
+    const vb = document.getElementById(`g_${i}_b`).value;
+    if (va !== '' && vb !== '') {
+      const na = Number(va), nb = Number(vb);
+      if (na > nb) wa++;
+      else if (nb > na) wb++;
+    }
+  }
+  document.getElementById('modalBigScoreA').value = wa;
+  document.getElementById('modalBigScoreB').value = wb;
+}
+
+function applyQuickScore(sa, sb) {
+  document.getElementById('modalBigScoreA').value = sa;
+  document.getElementById('modalBigScoreB').value = sb;
+  saveMatchModal();
+}
+
+function setWalkover(winnerSide) {
+  if (!activeMatchCtx) return;
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  if (!match) return;
+  const targetWins = Math.ceil(match.bestOf / 2);
+  match.scoreA = winnerSide === 'A' ? targetWins : 0;
+  match.scoreB = winnerSide === 'B' ? targetWins : 0;
+  match.winnerId = winnerSide === 'A' ? match.competitorAId : match.competitorBId;
+  match.isWalkover = true;
+  match.status = 'WALKOVER';
+
+  afterMatchUpdated(activeMatchCtx.stageIdx);
+  closeScoreModal();
+}
+
+function clearMatchResult() {
+  if (!activeMatchCtx) return;
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  if (!match) return;
+  match.scoreA = 0;
+  match.scoreB = 0;
+  match.gameScores = [];
+  match.winnerId = null;
+  match.isWalkover = false;
+  match.status = 'PENDING';
+
+  afterMatchUpdated(activeMatchCtx.stageIdx);
+  closeScoreModal();
+}
+
+function saveMatchModal() {
+  if (!activeMatchCtx) return;
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  if (!match) return;
+
+  const sa = Number(document.getElementById('modalBigScoreA').value) || 0;
+  const sb = Number(document.getElementById('modalBigScoreB').value) || 0;
+  match.scoreA = sa;
+  match.scoreB = sb;
+
+  const games = [];
+  for (let i = 0; i < match.bestOf; i++) {
+    const va = document.getElementById(`g_${i}_a`)?.value;
+    const vb = document.getElementById(`g_${i}_b`)?.value;
+    if (va !== '' && vb !== '' && va !== undefined) {
+      games.push({ a: Number(va), b: Number(vb) });
+    }
+  }
+  match.gameScores = games;
+
+  if (state.matchType === 'TEAM') {
+    const subs = [];
+    for (let i = 0; i < 5; i++) {
+      const pAEl = document.getElementById(`sub_${i}_pA`);
+      if (!pAEl) break;
+      subs.push({
+        pA: pAEl.value,
+        pB: document.getElementById(`sub_${i}_pB`).value,
+        sA: document.getElementById(`sub_${i}_sA`).value,
+        sB: document.getElementById(`sub_${i}_sB`).value
+      });
+    }
+    match.teamSubMatches = subs;
+  }
+
+  // 处理轮空或判定胜者
+  if (match.competitorAId === 'BYE' && match.competitorBId !== 'BYE') {
+    match.winnerId = match.competitorBId;
+    match.status = 'BYE_WIN';
+  } else if (match.competitorBId === 'BYE' && match.competitorAId !== 'BYE') {
+    match.winnerId = match.competitorAId;
+    match.status = 'BYE_WIN';
+  } else if (sa > sb) {
+    match.winnerId = match.competitorAId;
+    match.isWalkover = false;
+    match.status = 'FINISHED';
+  } else if (sb > sa) {
+    match.winnerId = match.competitorBId;
+    match.isWalkover = false;
+    match.status = 'FINISHED';
+  } else {
+    match.winnerId = null;
+    match.status = 'PENDING';
+  }
+
+  afterMatchUpdated(activeMatchCtx.stageIdx);
+  closeScoreModal();
+}
+
+function afterMatchUpdated(stageIdx) {
+  const stg = state.runtimeStages[stageIdx];
+  if (stg && stg.type === 'KNOCKOUT') {
+    propagateKnockoutWinners(stg.knockoutRounds);
+  }
+  saveState();
+  renderMainViewport();
+}
+
+function closeScoreModal() {
+  const modal = document.getElementById('scoreModal');
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+/**
+ * 球台全屏实时裁判记分牌逻辑 (支持11分制、10平后追分、发球权自动轮换)
+ */
+function openLiveScoreboard() {
+  if (!activeMatchCtx) return;
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  if (!match) return;
+
+  liveState = {
+    gameIndex: match.gameScores.length,
+    ptsA: 0,
+    ptsB: 0,
+    firstServer: (match.gameScores.length % 2 === 0) ? 'A' : 'B'
+  };
+
+  updateLiveScoreboardUI(match);
+  const el = document.getElementById('liveScoreboardModal');
+  el.classList.remove('hidden');
+  el.classList.add('flex');
+}
+
+function updateLiveScoreboardUI(match) {
+  document.getElementById('liveNameA').textContent = getCompetitorName(match.competitorAId);
+  document.getElementById('liveNameB').textContent = getCompetitorName(match.competitorBId);
+  document.getElementById('livePointsA').textContent = liveState.ptsA;
+  document.getElementById('livePointsB').textContent = liveState.ptsB;
+
+  let gwA = 0, gwB = 0;
+  match.gameScores.forEach(g => {
+    if (g.a > g.b) gwA++;
+    else if (g.b > g.a) gwB++;
+  });
+  document.getElementById('liveGamesA').textContent = gwA;
+  document.getElementById('liveGamesB').textContent = gwB;
+  document.getElementById('liveMatchInfo').textContent = `第 ${liveState.gameIndex + 1} 局 (${match.bestOf}局${Math.ceil(match.bestOf / 2)}胜)`;
+
+  // 计算当前发球方：每2分换发球，10:10后每1分换发球
+  const totalPts = liveState.ptsA + liveState.ptsB;
+  let server = liveState.firstServer;
+  if (liveState.ptsA >= 10 && liveState.ptsB >= 10) {
+    if ((totalPts - 20) % 2 !== 0) server = server === 'A' ? 'B' : 'A';
+  } else {
+    if (Math.floor(totalPts / 2) % 2 !== 0) server = server === 'A' ? 'B' : 'A';
+  }
+
+  document.getElementById('liveServerA').classList.toggle('invisible', server !== 'A');
+  document.getElementById('liveServerB').classList.toggle('invisible', server !== 'B');
+
+  document.getElementById('liveHistoryBar').innerHTML = match.gameScores.length
+    ? match.gameScores.map((g, i) => `<span class="px-2 py-0.5 bg-zinc-800 rounded">第${i + 1}局: <strong>${g.a}:${g.b}</strong></span>`).join('')
+    : '<span class="text-zinc-500">点击左右大面板直接加分，满11分且净胜2分自动提示结局</span>';
+}
+
+function addLivePoint(side, delta) {
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  if (!match) return;
+  if (side === 'A') liveState.ptsA = Math.max(0, liveState.ptsA + delta);
+  if (side === 'B') liveState.ptsB = Math.max(0, liveState.ptsB + delta);
+  updateLiveScoreboardUI(match);
+
+  // 检查是否达到单局11分获胜条件
+  if (delta > 0 && (liveState.ptsA >= 11 || liveState.ptsB >= 11) && Math.abs(liveState.ptsA - liveState.ptsB) >= 2) {
+    setTimeout(() => {
+      if (confirm(`本局比分 ${liveState.ptsA} : ${liveState.ptsB}，是否确认结束本局并进入下一局？`)) {
+        finishLiveGame();
+      }
+    }, 80);
+  }
+}
+
+function toggleFirstServer() {
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  liveState.firstServer = liveState.firstServer === 'A' ? 'B' : 'A';
+  updateLiveScoreboardUI(match);
+}
+
+function finishLiveGame() {
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  if (!match) return;
+  if (liveState.ptsA === 0 && liveState.ptsB === 0) return;
+
+  match.gameScores.push({ a: liveState.ptsA, b: liveState.ptsB });
+  let gwA = 0, gwB = 0;
+  match.gameScores.forEach(g => {
+    if (g.a > g.b) gwA++;
+    else if (g.b > g.a) gwB++;
+  });
+  match.scoreA = gwA;
+  match.scoreB = gwB;
+
+  liveState.gameIndex = match.gameScores.length;
+  liveState.ptsA = 0;
+  liveState.ptsB = 0;
+  liveState.firstServer = (liveState.gameIndex % 2 === 0) ? 'A' : 'B';
+
+  updateLiveScoreboardUI(match);
+}
+
+function closeLiveScoreboard() {
+  const match = findMatchById(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  const el = document.getElementById('liveScoreboardModal');
+  el.classList.add('hidden');
+  el.classList.remove('flex');
+  if (match) {
+    openScoreModal(activeMatchCtx.stageIdx, activeMatchCtx.matchId);
+  }
+}
+
+/**
+ * ============================================================================
+ * 9. 最终总排名与全赛事积分汇总算法
+ * ============================================================================
+ */
+function computeFinalTournamentStandings() {
+  // 汇总每名选手在所有阶段的总胜场、总负场、总积分、净胜局、净胜小分
+  const summaryMap = {};
+  state.competitors.forEach(c => {
+    summaryMap[c.id] = {
+      id: c.id,
+      name: c.name,
+      played: 0,
+      wins: 0,
+      losses: 0,
+      points: 0,
+      gamesWon: 0,
+      gamesLost: 0,
+      ptsWon: 0,
+      ptsLost: 0,
+      tierRank: 999,
+      badge: '参赛选手'
+    };
+  });
+
+  state.runtimeStages.forEach(stg => {
+    const allMatches = [];
+    if (stg.groups) stg.groups.forEach(g => allMatches.push(...g.matches));
+    if (stg.knockoutRounds) stg.knockoutRounds.forEach(r => allMatches.push(...r.matches));
+
+    allMatches.forEach(m => {
+      if (m.status !== 'FINISHED' && m.status !== 'WALKOVER') return;
+      const a = summaryMap[m.competitorAId];
+      const b = summaryMap[m.competitorBId];
+      if (a) {
+        a.played++;
+        a.gamesWon += Number(m.scoreA) || 0;
+        a.gamesLost += Number(m.scoreB) || 0;
+        (m.gameScores || []).forEach(g => { a.ptsWon += Number(g.a) || 0; a.ptsLost += Number(g.b) || 0; });
+        if (m.winnerId === a.id) { a.wins++; a.points += 2; }
+        else { a.losses++; a.points += m.isWalkover ? 0 : 1; }
+      }
+      if (b) {
+        b.played++;
+        b.gamesWon += Number(m.scoreB) || 0;
+        b.gamesLost += Number(m.scoreA) || 0;
+        (m.gameScores || []).forEach(g => { b.ptsWon += Number(g.b) || 0; b.ptsLost += Number(g.a) || 0; });
+        if (m.winnerId === b.id) { b.wins++; b.points += 2; }
+        else { b.losses++; b.points += m.isWalkover ? 0 : 1; }
+      }
+    });
+  });
+
+  const lastStage = state.runtimeStages[state.runtimeStages.length - 1];
+  if (lastStage && lastStage.type === 'KNOCKOUT' && lastStage.knockoutRounds.length > 0) {
+    const mainRounds = lastStage.knockoutRounds.filter(r => !r.isThirdPlace);
+    const thirdRound = lastStage.knockoutRounds.find(r => r.isThirdPlace);
+
+    // 决赛冠亚军
+    const finalMatch = mainRounds[mainRounds.length - 1]?.matches[0];
+    if (finalMatch && finalMatch.winnerId) {
+      const champId = finalMatch.winnerId;
+      const runnerId = getMatchLoserId(finalMatch);
+      if (summaryMap[champId]) { summaryMap[champId].tierRank = 1; summaryMap[champId].badge = '🥇 冠军'; }
+      if (summaryMap[runnerId]) { summaryMap[runnerId].tierRank = 2; summaryMap[runnerId].badge = '🥈 亚军'; }
+    }
+
+    // 季军与殿军
+    if (thirdRound && thirdRound.matches[0]?.winnerId) {
+      const thirdId = thirdRound.matches[0].winnerId;
+      const fourthId = getMatchLoserId(thirdRound.matches[0]);
+      if (summaryMap[thirdId]) { summaryMap[thirdId].tierRank = 3; summaryMap[thirdId].badge = '🥉 季军'; }
+      if (summaryMap[fourthId]) { summaryMap[fourthId].tierRank = 4; summaryMap[fourthId].badge = '第4名 (殿军)'; }
+    } else if (mainRounds.length >= 2) {
+      const semiMatches = mainRounds[mainRounds.length - 2].matches;
+      semiMatches.forEach(m => {
+        const lid = getMatchLoserId(m);
+        if (lid && summaryMap[lid] && summaryMap[lid].tierRank > 4) {
+          summaryMap[lid].tierRank = 3;
+          summaryMap[lid].badge = '🥉 并列季军 (四强)';
+        }
+      });
+    }
+
+    // 其余淘汰赛轮次被淘汰者定档 (8强、16强...)
+    for (let r = mainRounds.length - 3; r >= 0; r--) {
+      const tierNum = Math.pow(2, mainRounds.length - r);
+      mainRounds[r].matches.forEach(m => {
+        const lid = getMatchLoserId(m);
+        if (lid && summaryMap[lid] && summaryMap[lid].tierRank > tierNum) {
+          summaryMap[lid].tierRank = tierNum;
+          summaryMap[lid].badge = `${tierNum}强`;
+        }
+      });
+    }
+  } else if (lastStage && (lastStage.type === 'FULL_ROUND_ROBIN' || lastStage.type === 'GROUP_ROUND_ROBIN')) {
+    lastStage.groups.forEach(g => {
+      const st = calculateGroupStandings(g);
+      st.forEach(row => {
+        if (summaryMap[row.competitorId]) {
+          summaryMap[row.competitorId].tierRank = row.rank;
+          summaryMap[row.competitorId].badge = `${g.name} 第 ${row.rank} 名`;
+        }
+      });
+    });
+  }
+
+  return Object.values(summaryMap).sort((a, b) => {
+    if (a.tierRank !== b.tierRank) return a.tierRank - b.tierRank;
+    if (b.points !== a.points) return b.points - a.points;
+    const gDiffA = a.gamesWon - a.gamesLost;
+    const gDiffB = b.gamesWon - b.gamesLost;
+    if (gDiffB !== gDiffA) return gDiffB - gDiffA;
+    return (b.ptsWon - b.ptsLost) - (a.ptsWon - a.ptsLost);
+  });
+}
+
+function renderFinalRankingView(viewport) {
+  const list = computeFinalTournamentStandings();
+  const box = document.createElement('div');
+  box.className = 'bg-white border border-zinc-300 rounded-lg shadow-2xs overflow-hidden';
+
+  box.innerHTML = `
+    <div class="bg-zinc-900 text-white px-6 py-4 flex items-center justify-between">
+      <div>
+        <h2 class="font-extrabold text-base">${escapeHtml(state.title)} - 最终总排名与积分榜</h2>
+        <p class="text-xs text-zinc-400 mt-0.5">综合淘汰赛最终轮次、循环赛名次、总积分(胜2负1)、净胜局与净胜小分自动合成</p>
+      </div>
+      <button onclick="exportCSV()" class="bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold px-4 py-2 rounded">
+        导出 Excel / CSV 成绩单
+      </button>
+    </div>
+    <div class="overflow-x-auto p-5">
+      <table class="w-full border-collapse text-sm">
+        <thead>
+          <tr class="bg-zinc-100 text-zinc-700 text-xs uppercase">
+            <th class="border border-zinc-300 px-4 py-2.5 text-center w-20">总名次</th>
+            <th class="border border-zinc-300 px-4 py-2.5 text-left">选手 / 队伍</th>
+            <th class="border border-zinc-300 px-4 py-2.5 text-center">荣誉 / 阶段成绩</th>
+            <th class="border border-zinc-300 px-4 py-2.5 text-center">总场次</th>
+            <th class="border border-zinc-300 px-4 py-2.5 text-center">胜 / 负</th>
+            <th class="border border-zinc-300 px-4 py-2.5 text-center">累计积分</th>
+            <th class="border border-zinc-300 px-4 py-2.5 text-center">总胜负局 (净胜)</th>
+            <th class="border border-zinc-300 px-4 py-2.5 text-center">总小分 (净胜)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.map((r, i) => `
+            <tr class="${i < 3 ? 'bg-amber-50/40 font-semibold' : 'hover:bg-zinc-50'}">
+              <td class="border border-zinc-300 px-4 py-2.5 text-center font-mono font-black ${i === 0 ? 'text-orange-600 text-base' : ''}">
+                #${i + 1}
+              </td>
+              <td class="border border-zinc-300 px-4 py-2.5 font-bold">${escapeHtml(r.name)}</td>
+              <td class="border border-zinc-300 px-4 py-2.5 text-center">
+                <span class="px-2.5 py-0.5 rounded text-xs font-bold ${i === 0 ? 'bg-amber-400 text-black' : (i < 3 ? 'bg-orange-100 text-orange-800' : 'bg-zinc-100 text-zinc-600')}">
+                  ${escapeHtml(r.badge)}
+                </span>
+              </td>
+              <td class="border border-zinc-300 px-4 py-2.5 text-center font-mono">${r.played}</td>
+              <td class="border border-zinc-300 px-4 py-2.5 text-center font-mono text-emerald-700">${r.wins}胜 ${r.losses}负</td>
+              <td class="border border-zinc-300 px-4 py-2.5 text-center font-mono font-black text-orange-600">${r.points}</td>
+              <td class="border border-zinc-300 px-4 py-2.5 text-center font-mono text-xs">${r.gamesWon}:${r.gamesLost} (${r.gamesWon - r.gamesLost >= 0 ? '+' : ''}${r.gamesWon - r.gamesLost})</td>
+              <td class="border border-zinc-300 px-4 py-2.5 text-center font-mono text-xs">${r.ptsWon}:${r.ptsLost} (${r.ptsWon - r.ptsLost >= 0 ? '+' : ''}${r.ptsWon - r.ptsLost})</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  viewport.appendChild(box);
+}
+
+/**
+ * ============================================================================
+ * 辅助工具函数、示例数据与导出
+ * ============================================================================
+ */
+function getCompetitorName(compId) {
+  if (!compId || compId === 'TBD') return '待定 (TBD)';
+  if (compId === 'BYE') return '轮空 (BYE)';
+  const c = state.competitors.find(x => x.id === compId);
+  return c ? c.name : '未知选手';
+}
+
+function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function loadDemoData(silent = false) {
+  if (!silent && !confirm('加载示例将覆盖当前名单与赛程，是否继续？')) return;
+  state.matchType = 'SINGLES';
+  state.competitors = [
+    '樊振东', '许昕', '马龙', '王楚钦', '林高远', '梁靖崑', '林诗栋', '周启豪'
+  ].map((name, i) => ({
+    id: 'demo_' + (i + 1),
+    name,
+    members: [name],
+    seed: i + 1
+  }));
+
+  state.stageConfigs = [
+    {
+      id: 'stage_1',
+      name: '第一阶段：小组循环赛',
+      type: 'GROUP_ROUND_ROBIN',
+      bestOf: 5,
+      groupCount: 2,
+      advancePerGroup: 2,
+      seedingMethod: 'SNAKE',
+      hasThirdPlace: true
+    },
+    {
+      id: 'stage_2',
+      name: '第二阶段：单败淘汰赛',
+      type: 'KNOCKOUT',
+      bestOf: 5,
+      groupCount: 1,
+      advancePerGroup: 1,
+      seedingMethod: 'SNAKE',
+      hasThirdPlace: true
+    }
+  ];
+
+  generateTournamentSchedule();
+  syncUIFromState();
+}
+
+function exportCSV() {
+  const rows = computeFinalTournamentStandings();
+  let csv = '\uFEFF总名次,选手/队伍,阶段成绩,总场次,胜,负,总积分,胜局,负局,净胜局\n';
+  rows.forEach((r, i) => {
+    csv += `${i + 1},"${r.name}","${r.badge}",${r.played},${r.wins},${r.losses},${r.points},${r.gamesWon},${r.gamesLost},${r.gamesWon - r.gamesLost}\n`;
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.title}_总排名成绩单.csv`;
+  a.click();
+}
+
+function resetAll() {
+  if (!confirm('确定要清空所有数据并恢复初始状态吗？')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  location.reload();
+}
+</script>
+</body>
+</html>
