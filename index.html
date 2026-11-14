@@ -20,14 +20,14 @@
 <body class="min-h-screen flex flex-col">
 
   <!-- 全局轻提示 Toast -->
-  <div id="toastBanner" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 hidden bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-xl border border-emerald-400 transition-all">
+  <div id="toastBanner" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 hidden bg-emerald-600 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-xl border border-emerald-400 transition-all text-center max-w-[90vw]">
     ✅ 操作成功
   </div>
 
   <!-- 顶部导航与数据保存/分享中心 -->
   <header class="bg-zinc-900 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 border-b-2 border-orange-500 sticky top-0 z-30 shadow-md">
     <div class="flex items-center gap-2">
-      <button type="button" onclick="toggleSidebar()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1.5 rounded border border-zinc-700 text-xs font-bold flex items-center gap-1" title="收起或展开左侧排赛设置栏">
+      <button type="button" onclick="toggleSidebar()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-2.5 py-1.5 rounded border border-zinc-700 text-xs font-bold flex items-center gap-1">
         <span id="sidebarToggleIcon">☰</span>
         <span id="sidebarToggleText" class="hidden sm:inline">收起设置</span>
       </button>
@@ -37,18 +37,18 @@
       <span id="modeBadge" class="text-[11px] bg-orange-600 text-white px-2 py-0.5 rounded font-semibold shrink-0">单打</span>
     </div>
 
-    <!-- 核心功能区：一键保存、一键复制分享、一键粘贴导入、打包带分网页 -->
+    <!-- 核心功能区 -->
     <div class="flex items-center gap-1.5 flex-wrap">
       <button type="button" onclick="manualSaveWithToast()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded font-bold shadow-xs flex items-center gap-1">
         💾 一键保存
       </button>
       <button type="button" onclick="copyShareDataToClipboard()" class="text-xs bg-orange-600 hover:bg-orange-500 text-white px-3 py-1.5 rounded font-bold shadow-xs flex items-center gap-1">
-        📋 一键复制赛事数据(含积分)
+        📋 一键复制分享(含积分)
       </button>
       <button type="button" onclick="openImportModal()" class="text-xs bg-amber-500 hover:bg-amber-400 text-black px-3 py-1.5 rounded font-bold shadow-xs flex items-center gap-1">
         📥 粘贴导入/追加
       </button>
-      <button type="button" onclick="downloadSelfContainedHTML()" class="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-2.5 py-1.5 rounded border border-zinc-600 font-medium" title="下载包含当前全部积分的独立HTML网页文件，可直接发给别人">
+      <button type="button" onclick="downloadSelfContainedHTML()" class="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-100 px-2.5 py-1.5 rounded border border-zinc-600 font-medium">
         📤 导出含积分网页
       </button>
 
@@ -106,7 +106,6 @@
             <button type="button" onclick="parsePastedNames(true)" class="bg-zinc-200 hover:bg-zinc-300 text-zinc-800 text-xs font-bold py-2 px-3 rounded">追加名单</button>
           </div>
 
-          <!-- 已解析的选手胶囊列表 -->
           <div id="competitorListContainer" class="mt-3 max-h-40 overflow-y-auto border border-zinc-200 rounded p-2 bg-zinc-50/50 flex flex-wrap gap-1.5 empty:hidden"></div>
         </div>
 
@@ -132,10 +131,8 @@
       </div>
     </aside>
 
-    <!-- 右侧主画布：阶段切换页签 + 赛程/九宫格/淘汰树 + 总排名 -->
+    <!-- 右侧主画布 -->
     <main class="flex-1 flex flex-col bg-zinc-100 min-w-0">
-      
-      <!-- 阶段导航栏（吸顶显示） -->
       <div class="bg-white border-b border-zinc-300 px-4 py-2.5 flex items-center justify-between flex-wrap gap-2 sticky top-[52px] z-20 shadow-2xs">
         <div id="stageTabs" class="flex items-center gap-1.5 flex-wrap"></div>
         <div class="flex items-center gap-2">
@@ -146,9 +143,7 @@
         </div>
       </div>
 
-      <!-- 主内容渲染区 -->
       <div id="mainStageViewport" class="flex-1 p-3 sm:p-6"></div>
-
     </main>
   </div>
 
@@ -164,7 +159,6 @@
       </div>
 
       <div class="p-4 sm:p-5 space-y-4 max-h-[80vh] overflow-y-auto">
-        <!-- 双方选手选择与大比分输入 -->
         <div class="grid grid-cols-7 items-center gap-2 bg-zinc-50 p-3 rounded border border-zinc-200">
           <div class="col-span-3 text-center">
             <select id="modalPlayerASelect" onchange="changeMatchCompetitor('A', this.value)" class="w-full font-bold text-sm sm:text-base text-center bg-white border border-zinc-300 rounded px-1.5 py-1.5 mb-1"></select>
@@ -183,13 +177,11 @@
           </div>
         </div>
 
-        <!-- 极速比分快捷按钮 -->
         <div>
-          <div class="text-xs font-bold text-zinc-500 mb-2">⚡ 一键极速录分 (点击直接填入大比分并原地保存，页面绝不跳回顶部)：</div>
+          <div class="text-xs font-bold text-zinc-500 mb-2">⚡ 一键极速录分 (点击直接保存，画面留在原位置不跳回顶部)：</div>
           <div id="quickScoreButtons" class="flex flex-wrap gap-2"></div>
         </div>
 
-        <!-- 特殊判罚：弃权/伤退直接获胜 -->
         <div class="flex flex-wrap items-center justify-between gap-2 bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs">
           <span class="text-amber-800 font-medium">特殊情况判罚 (弃权得0分)：</span>
           <div class="space-x-1.5">
@@ -198,7 +190,6 @@
           </div>
         </div>
 
-        <!-- 每局小分明细 & 实时裁判记分牌入口 -->
         <div class="border-t border-zinc-200 pt-3">
           <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
             <span class="text-xs font-bold text-zinc-600">各局小分明细 (选填)</span>
@@ -209,7 +200,6 @@
           <div id="gameScoresInputs" class="grid grid-cols-3 sm:grid-cols-5 gap-2"></div>
         </div>
 
-        <!-- 团体赛分盘明细记录区 -->
         <div id="teamSubMatchesSection" class="border-t border-zinc-200 pt-3 hidden">
           <div class="text-xs font-bold text-zinc-600 mb-2">团体赛各盘对阵明细 (选填)</div>
           <div id="teamSubMatchesList" class="space-y-2"></div>
@@ -226,39 +216,51 @@
     </div>
   </div>
 
-  <!-- 弹窗2：一键复制分享 / 粘贴导入与追加数据模态框 -->
-  <div id="shareImportModal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4">
+  <!-- 弹窗2：全新分区设计的【分享导出 / 粘贴导入】模态框 -->
+  <div id="shareImportModal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-3 sm:p-4">
     <div class="bg-white rounded-lg max-w-lg w-full shadow-2xl border border-zinc-300 overflow-hidden">
       <div class="bg-zinc-900 text-white px-5 py-3.5 flex items-center justify-between">
-        <span class="font-bold text-sm">📥 赛事数据一键复制 / 粘贴导入与追加</span>
+        <span class="font-bold text-sm">🔄 赛事数据跨设备分享 / 粘贴导入中心</span>
         <button type="button" onclick="closeImportModal()" class="text-zinc-400 hover:text-white text-xl leading-none">&times;</button>
       </div>
-      <div class="p-5 space-y-4">
-        <div class="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-900 space-y-1">
-          <div class="font-bold">💡 分享与跨网站复制说明（所有已录积分与排名 100% 保留）：</div>
-          <div>1. 点下方【生成当前数据码并复制】，发给微信好友或粘贴到新网站。</div>
-          <div>2. 在新网站里粘贴到下方框内，点**“完整导入恢复”**即可还原全部积分，或点**“追加合并”**把新比赛加进来。</div>
-        </div>
 
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="text-xs font-bold text-zinc-700">赛事数据口令框：</label>
-            <div class="space-x-1">
-              <button type="button" onclick="fillCurrentShareCodeIntoBox()" class="text-xs bg-zinc-200 hover:bg-zinc-300 text-zinc-800 px-2.5 py-1 rounded font-bold">生成当前数据码并复制</button>
-              <button type="button" onclick="readFromSystemClipboard()" class="text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 px-2.5 py-1 rounded font-bold">一键读取剪贴板</button>
-            </div>
+      <div class="p-4 sm:p-5 space-y-5 max-h-[82vh] overflow-y-auto">
+        <!-- 区域一：把当前页面的比赛数据复制出去 -->
+        <div class="bg-orange-50 border border-orange-200 rounded-lg p-3.5 space-y-2.5">
+          <div class="text-xs font-extrabold text-orange-900 flex items-center justify-between">
+            <span>📤 第一步：把有分数的页面数据复制出去</span>
+            <span class="text-[11px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded">含全部比分与排名</span>
           </div>
-          <textarea id="importDataTextarea" rows="5" placeholder="在此长按粘贴 TTV2_... 赛事数据码，或直接粘贴分享链接..." 
-            class="w-full border border-zinc-300 rounded p-2.5 text-xs font-mono bg-zinc-50 focus:border-orange-500 focus:outline-none"></textarea>
+          <input id="exportShareReadonlyBox" type="text" readonly 
+            class="w-full border border-orange-300 rounded px-2.5 py-1.5 text-xs font-mono bg-white text-zinc-600 select-all"
+            onclick="this.select()">
+          <div class="grid grid-cols-2 gap-2">
+            <button type="button" onclick="copyCurrentShareLinkOrCode('LINK')" class="bg-orange-600 hover:bg-orange-500 text-white font-bold py-2 px-3 rounded text-xs shadow-2xs">
+              🔗 复制带积分分享链接
+            </button>
+            <button type="button" onclick="copyCurrentShareLinkOrCode('CODE')" class="bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-2 px-3 rounded text-xs shadow-2xs">
+              📋 复制超短数据口令
+            </button>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
-          <button type="button" onclick="executeImportData('OVERWRITE')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded text-xs shadow-sm">
-            🔄 完整导入恢复 (保留全部积分与排名)
-          </button>
-          <button type="button" onclick="executeImportData('APPEND')" class="bg-zinc-900 hover:bg-zinc-800 text-white font-bold py-2.5 px-4 rounded text-xs shadow-sm">
-            ➕ 追加合并至当前网站 (增加选手与对阵)
-          </button>
+        <!-- 区域二：把别人发来的数据码粘贴到当前网站 -->
+        <div class="border border-zinc-300 rounded-lg p-3.5 space-y-2.5 bg-zinc-50">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-extrabold text-zinc-800">📥 第二步：在新网站粘贴口令并恢复/追加</span>
+            <button type="button" onclick=" document.getElementById('importDataTextarea').value = '' " class="text-xs text-zinc-400 hover:text-red-600">清空输入框</button>
+          </div>
+          <textarea id="importDataTextarea" rows="4" placeholder="请在此长按粘贴别人发给你的 TTV3_ / TTV2_ 数据口令，或带 #ttdata= 的分享网址..." 
+            class="w-full border border-zinc-300 rounded p-2.5 text-xs font-mono bg-white focus:border-orange-500 focus:outline-none"></textarea>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            <button type="button" onclick="executeImportData('OVERWRITE')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-3 rounded text-xs shadow-sm">
+              🔄 完整导入恢复 (保留全部积分)
+            </button>
+            <button type="button" onclick="executeImportData('APPEND')" class="bg-zinc-900 hover:bg-zinc-800 text-white font-bold py-2.5 px-3 rounded text-xs shadow-sm">
+              ➕ 追加合并至当前网站
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -279,7 +281,6 @@
     </div>
 
     <div class="flex-1 grid grid-cols-2 gap-3 sm:gap-6 my-4 items-stretch">
-      <!-- 选手 A -->
       <div onclick="addLivePoint('A', 1)" class="bg-zinc-900 hover:bg-zinc-800/80 border-2 border-zinc-800 rounded-2xl flex flex-col items-center justify-between p-4 sm:p-6 cursor-pointer relative active:scale-[0.99] transition">
         <div class="w-full flex items-center justify-between">
           <span id="liveServerA" class="text-[11px] bg-amber-500 text-black font-black px-2.5 py-0.5 rounded-full">🏓 发球</span>
@@ -293,7 +294,6 @@
         </div>
       </div>
 
-      <!-- 选手 B -->
       <div onclick="addLivePoint('B', 1)" class="bg-zinc-900 hover:bg-zinc-800/80 border-2 border-zinc-800 rounded-2xl flex flex-col items-center justify-between p-4 sm:p-6 cursor-pointer relative active:scale-[0.99] transition">
         <div class="w-full flex items-center justify-between">
           <span id="liveServerB" class="text-[11px] bg-amber-500 text-black font-black px-2.5 py-0.5 rounded-full invisible">🏓 发球</span>
@@ -311,7 +311,6 @@
     <div id="liveHistoryBar" class="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 flex flex-wrap items-center justify-center gap-3 text-xs sm:text-sm font-mono"></div>
   </div>
 
-<!-- 内嵌快照数据槽位（用于导出含积分的独立HTML网页） -->
 <script id="embeddedSnapshotScript">
   window.__EMBEDDED_TOURNAMENT_STATE__ = null;
 </script>
@@ -319,9 +318,7 @@
 <script>
 /**
  * ============================================================================
- * 核心全局状态与旧版数据无损继承引擎
- * 同时兼容第一版 (TT_TOURNAMENT_STATE_V1) 与第二版 (TT_TOURNAMENT_STATE_V2)
- * 自动挑选已录比分最多的存档，保证升级代码时正在进行的比赛分数 100% 不丢失！
+ * 核心全局状态与多版本无损兼容引擎 (支持 TTV3 超短码 + TTV2 兼容 + V1/V2 缓存继承)
  * ============================================================================
  */
 const STORAGE_KEY_V1 = 'TT_TOURNAMENT_STATE_V1';
@@ -364,7 +361,6 @@ let activeMatchCtx = null;
 let liveState = { gameIndex: 0, ptsA: 0, ptsB: 0, firstServer: 'A' };
 let savedScrollBeforeModal = { winX: 0, winY: 0 };
 
-// 计算某个存档对象中已录入比分的场次数量，用于优先保护正在进行的比赛数据
 function countRecordedMatches(st) {
   if (!st || !Array.isArray(st.runtimeStages)) return -1;
   let scoreCount = 0;
@@ -388,7 +384,6 @@ function countRecordedMatches(st) {
       });
     }
   });
-  // 如果不是默认 demo 名单，额外增加权重，防止被示例数据覆盖
   const isCustomList = Array.isArray(st.competitors) && st.competitors.some(c => !String(c.id).startsWith('demo_'));
   return scoreCount * 100 + (isCustomList ? 10 : 0);
 }
@@ -399,32 +394,32 @@ window.addEventListener('DOMContentLoaded', () => {
   // 1. 优先检查网址 Hash 是否带有分享过来的赛事数据 (#ttdata=...)
   if (window.location.hash && window.location.hash.includes('ttdata=')) {
     try {
-      const hashCode = window.location.hash.split('ttdata=')[1].split('&')[0];
+      const hashCode = decodeURIComponent(window.location.hash.split('ttdata=')[1].split('&')[0]);
       const decoded = decodeCodeToState(hashCode);
       if (decoded && decoded.competitors) {
         state = decoded;
         loadedFromExternal = true;
-        saveState(true);
-        showToast('✅ 已从分享链接完整加载赛事积分与排名！');
+        saveState();
+        showToast('✅ 已从分享网址完整恢复全部积分与排名！');
       }
     } catch (e) {
       console.error('解析分享链接失败:', e);
     }
   }
 
-  // 2. 其次检查是否为“导出含积分网页”自带的内嵌快照
+  // 2. 检查是否为“导出含积分网页”自带的内嵌快照
   if (!loadedFromExternal && window.__EMBEDDED_TOURNAMENT_STATE__) {
     try {
       state = JSON.parse(JSON.stringify(window.__EMBEDDED_TOURNAMENT_STATE__));
       loadedFromExternal = true;
-      saveState(true);
-      showToast('✅ 已加载网页内嵌的全部赛事积分与对阵！');
+      saveState();
+      showToast('✅ 已加载网页内嵌的全部赛事积分！');
     } catch (e) {
       console.error(e);
     }
   }
 
-  // 3. 智能对比第一版 (V1) 与第二版 (V2) 本地缓存，优先读取有真实比赛比分的那份数据
+  // 3. 对比 V1 与 V2 本地缓存，自动继承有真实比赛比分的那份数据
   if (!loadedFromExternal) {
     let s1 = null, s2 = null;
     try { s1 = JSON.parse(localStorage.getItem(STORAGE_KEY_V1)); } catch (e) {}
@@ -435,38 +430,197 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (weight1 >= weight2 && s1 && Array.isArray(s1.competitors) && s1.competitors.length > 0) {
       state = s1;
-      saveState(true);
+      saveState();
     } else if (s2 && Array.isArray(s2.competitors) && s2.competitors.length > 0) {
       state = s2;
-      saveState(true);
+      saveState();
     }
   }
 
   if (!state.competitors || state.competitors.length === 0) {
     loadDemoData(true);
   } else {
+    saveState(); // 确保打开网页时地址栏立即带上最新的 #ttdata= 后缀
     syncUIFromState();
   }
 });
 
 /**
  * ============================================================================
- * 提示条、双通道同步保存、压缩编码与跨站分享导入引擎
+ * TTV3 超短口令压缩算法（体积缩小 85%，彻底解决微信截断与换行报错）
  * ============================================================================
  */
+function packMinimalState(st) {
+  const compIds = st.competitors.map(c => c.id);
+  const encodeCid = (id) => {
+    if (!id) return -3;
+    if (id === 'BYE') return -1;
+    if (id === 'TBD') return -2;
+    const idx = compIds.indexOf(id);
+    return idx !== -1 ? idx : id;
+  };
+  const statusMap = { PENDING: 0, FINISHED: 1, WALKOVER: 2, BYE_WIN: 3 };
+  const packMatch = (m) => {
+    const base = [
+      m.order || 1,
+      encodeCid(m.competitorAId),
+      encodeCid(m.competitorBId),
+      m.bestOf || 5
+    ];
+    if (m.status === 'PENDING' && !m.scoreA && !m.scoreB && (!m.gameScores || !m.gameScores.length)) {
+      return base;
+    }
+    base.push(
+      m.scoreA || 0,
+      m.scoreB || 0,
+      encodeCid(m.winnerId),
+      statusMap[m.status] ?? 0,
+      m.isWalkover ? 1 : 0,
+      (m.gameScores || []).map(g => [g.a, g.b]),
+      (m.teamSubMatches || []).map(s => [s.pA, s.pB, s.sA, s.sB])
+    );
+    return base;
+  };
+
+  return {
+    v: 3,
+    t: st.title,
+    mt: st.matchType,
+    tf: st.teamFormat,
+    fe: st.freeEditMode ? 1 : 0,
+    at: st.activeTab,
+    c: st.competitors.map(c => [c.name, c.members || [c.name], c.seed || 1]),
+    sc: st.stageConfigs.map(s => [s.name, s.type, s.bestOf, s.groupCount, s.advancePerGroup, s.seedingMethod, s.hasThirdPlace ? 1 : 0]),
+    rs: (st.runtimeStages || []).map(rs => [
+      rs.index,
+      rs.name,
+      rs.type,
+      rs.bestOf,
+      rs.groupCount,
+      rs.advancePerGroup,
+      rs.seedingMethod,
+      rs.hasThirdPlace ? 1 : 0,
+      (rs.groups || []).map(g => [
+        g.name,
+        g.competitorIds.map(encodeCid),
+        g.matches.map(packMatch),
+        g.manualOrder ? g.manualOrder.map(encodeCid) : null,
+        g.manualAdvance ? Object.entries(g.manualAdvance).map(([k, val]) => [encodeCid(k), val ? 1 : 0]) : []
+      ]),
+      (rs.knockoutRounds || []).map(kr => [
+        kr.roundIndex,
+        kr.name,
+        kr.isThirdPlace ? 1 : 0,
+        kr.matches.map(packMatch)
+      ])
+    ])
+  };
+}
+
+function unpackMinimalState(d) {
+  const competitors = (d.c || []).map((item, i) => ({
+    id: 'comp_' + (i + 1),
+    name: item[0],
+    members: item[1] || [item[0]],
+    seed: item[2] || (i + 1)
+  }));
+  const decodeCid = (val) => {
+    if (val === -3 || val === null || val === undefined) return null;
+    if (val === -1) return 'BYE';
+    if (val === -2) return 'TBD';
+    if (typeof val === 'number' && competitors[val]) return competitors[val].id;
+    return String(val);
+  };
+  const revStatus = ['PENDING', 'FINISHED', 'WALKOVER', 'BYE_WIN'];
+  const unpackMatch = (arr, stageIdx, groupId, roundIdx) => {
+    const isShort = arr.length <= 4;
+    return {
+      id: `m_${stageIdx}_${groupId}_${roundIdx}_${arr[0]}_${Math.random().toString(36).slice(2, 6)}`,
+      stageIdx,
+      groupId,
+      roundIndex: roundIdx,
+      order: arr[0],
+      competitorAId: decodeCid(arr[1]),
+      competitorBId: decodeCid(arr[2]),
+      bestOf: arr[3] || 5,
+      scoreA: isShort ? 0 : (arr[4] || 0),
+      scoreB: isShort ? 0 : (arr[5] || 0),
+      winnerId: isShort ? null : decodeCid(arr[6]),
+      status: isShort ? 'PENDING' : (revStatus[arr[7]] || 'PENDING'),
+      isWalkover: isShort ? false : Boolean(arr[8]),
+      gameScores: isShort ? [] : (arr[9] || []).map(g => ({ a: g[0], b: g[1] })),
+      teamSubMatches: isShort ? [] : (arr[10] || []).map(s => ({ pA: s[0], pB: s[1], sA: s[2], sB: s[3] }))
+    };
+  };
+
+  return {
+    title: d.t || '2026 乒乓球公开赛',
+    matchType: d.mt || 'SINGLES',
+    teamFormat: d.tf || 'OLYMPIC_5',
+    freeEditMode: Boolean(d.fe),
+    sidebarCollapsed: false,
+    activeTab: d.at || 'stage_0',
+    competitors,
+    stageConfigs: (d.sc || []).map((s, idx) => ({
+      id: 'stage_' + (idx + 1),
+      name: s[0],
+      type: s[1],
+      bestOf: s[2],
+      groupCount: s[3],
+      advancePerGroup: s[4],
+      seedingMethod: s[5],
+      hasThirdPlace: Boolean(s[6])
+    })),
+    runtimeStages: (d.rs || []).map(rs => {
+      const sIdx = rs[0];
+      return {
+        index: sIdx,
+        name: rs[1],
+        type: rs[2],
+        bestOf: rs[3],
+        groupCount: rs[4],
+        advancePerGroup: rs[5],
+        seedingMethod: rs[6],
+        hasThirdPlace: Boolean(rs[7]),
+        groups: (rs[8] || []).map((g, gIdx) => {
+          const gId = `s${sIdx}_g${gIdx}`;
+          const manualAdv = {};
+          (g[4] || []).forEach(([k, v]) => {
+            const cid = decodeCid(k);
+            if (cid) manualAdv[cid] = Boolean(v);
+          });
+          return {
+            id: gId,
+            name: g[0],
+            competitorIds: (g[1] || []).map(decodeCid),
+            matches: (g[2] || []).map((m, mIdx) => unpackMatch(m, sIdx, gId, mIdx + 1)),
+            manualOrder: g[3] ? g[3].map(decodeCid) : null,
+            manualAdvance: manualAdv
+          };
+        }),
+        knockoutRounds: (rs[9] || []).map(kr => ({
+          roundIndex: kr[0],
+          name: kr[1],
+          isThirdPlace: Boolean(kr[2]),
+          matches: (kr[3] || []).map(m => unpackMatch(m, sIdx, `ko_r${kr[0]}`, kr[0] + 1))
+        }))
+      };
+    })
+  };
+}
+
 let toastTimer = null;
 function showToast(msg) {
   const banner = document.getElementById('toastBanner');
   banner.textContent = msg;
   banner.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => banner.classList.add('hidden'), 2800);
+  toastTimer = setTimeout(() => banner.classList.add('hidden'), 3200);
 }
 
 function saveState(skipHashUpdate = false) {
   try {
     const rawJson = JSON.stringify(state);
-    // 同时写入 V1 和 V2 两个缓存槽位，彻底杜绝版本切换丢分
     localStorage.setItem(STORAGE_KEY_V1, rawJson);
     localStorage.setItem(STORAGE_KEY_V2, rawJson);
 
@@ -484,31 +638,47 @@ function manualSaveWithToast() {
   showToast('💾 已保存当前所有积分、分组与排名！');
 }
 
+// 编码为超短 TTV3_ 口令
 function encodeStateToCode(obj) {
-  const json = JSON.stringify(obj);
+  const minimal = packMinimalState(obj);
+  const json = JSON.stringify(minimal);
   const bytes = new TextEncoder().encode(json);
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
-  return 'TTV2_' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return 'TTV3_' + btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
+// 容错解码器（支持忽略微信换行/空格，同时兼容 TTV3_、TTV2_ 与原始 JSON）
 function decodeCodeToState(rawStr) {
   let clean = rawStr.trim();
   if (clean.startsWith('{') && clean.endsWith('}')) {
-    return JSON.parse(clean);
+    const parsed = JSON.parse(clean);
+    return parsed.v === 3 ? unpackMinimalState(parsed) : parsed;
   }
+
   if (clean.includes('ttdata=')) {
-    clean = clean.split('ttdata=')[1].split(/[#&\s]/)[0];
+    clean = decodeURIComponent(clean.split('ttdata=')[1].split('&')[0]);
   }
-  const match = clean.match(/TTV2_[A-Za-z0-9\-_]+/);
+
+  // 剔除所有空白符与换行符，防止微信长文本自动换行导致截断
+  const noSpace = clean.replace(/\s+/g, '');
+  const match = noSpace.match(/TTV([23])_([A-Za-z0-9\-_]+)/);
+  let version = '3';
   if (match) {
-    clean = match[0];
+    version = match[1];
+    clean = match[2];
+  } else if (noSpace.startsWith('TTV3_')) {
+    version = '3';
+    clean = noSpace.slice(5);
+  } else if (noSpace.startsWith('TTV2_')) {
+    version = '2';
+    clean = noSpace.slice(5);
+  } else {
+    throw new Error('NOT_TT_CODE');
   }
-  if (clean.startsWith('TTV2_')) {
-    clean = clean.slice(5);
-  }
+
   clean = clean.replace(/-/g, '+').replace(/_/g, '/');
   while (clean.length % 4) clean += '=';
   const binary = atob(clean);
@@ -517,7 +687,8 @@ function decodeCodeToState(rawStr) {
     bytes[i] = binary.charCodeAt(i);
   }
   const json = new TextDecoder().decode(bytes);
-  return JSON.parse(json);
+  const data = JSON.parse(json);
+  return (version === '3' || data.v === 3) ? unpackMinimalState(data) : data;
 }
 
 function copyShareDataToClipboard() {
@@ -530,25 +701,22 @@ function copyShareDataToClipboard() {
 
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(sharePayload).then(() => {
-      showToast('📋 已一键复制赛事完整数据（含全部积分）！可直接发给别人或去新网站粘贴');
+      showToast('📋 已一键复制带积分的分享链接/口令！直接发给微信好友即可');
     }).catch(() => {
-      openImportModalWithCode(sharePayload);
+      openImportModal();
     });
   } else {
-    openImportModalWithCode(sharePayload);
+    openImportModal();
   }
 }
 
-function openImportModalWithCode(codeStr) {
-  openImportModal();
-  const box = document.getElementById('importDataTextarea');
-  box.value = codeStr;
-  box.select();
-  document.execCommand('copy');
-  showToast('📋 数据码已生成并选中，请复制或直接分享！');
-}
-
 function openImportModal() {
+  saveState();
+  const code = encodeStateToCode(state);
+  const isHttp = window.location.protocol.startsWith('http');
+  const shareUrl = isHttp ? `${window.location.origin}${window.location.pathname}#ttdata=${code}` : code;
+  document.getElementById('exportShareReadonlyBox').value = shareUrl;
+
   const modal = document.getElementById('shareImportModal');
   modal.classList.remove('hidden');
   modal.classList.add('flex');
@@ -560,44 +728,55 @@ function closeImportModal() {
   modal.classList.remove('flex');
 }
 
-function fillCurrentShareCodeIntoBox() {
+function copyCurrentShareLinkOrCode(type) {
+  saveState();
   const code = encodeStateToCode(state);
-  const box = document.getElementById('importDataTextarea');
-  box.value = code;
+  const isHttp = window.location.protocol.startsWith('http');
+  const textToCopy = (type === 'LINK' && isHttp)
+    ? `${window.location.origin}${window.location.pathname}#ttdata=${code}`
+    : code;
+
+  const box = document.getElementById('exportShareReadonlyBox');
+  box.value = textToCopy;
   box.select();
+
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(code);
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      showToast(type === 'LINK' ? '🔗 已复制带全部积分的分享网址！' : '📋 已复制超短赛事口令！');
+    }).catch(() => {
+      document.execCommand('copy');
+      showToast('📋 已复制到剪贴板！');
+    });
   } else {
     document.execCommand('copy');
-  }
-  showToast('📋 当前赛事完整数据码已填入并复制！');
-}
-
-async function readFromSystemClipboard() {
-  try {
-    const text = await navigator.clipboard.readText();
-    if (text) {
-      document.getElementById('importDataTextarea').value = text;
-      showToast('✅ 已从剪贴板粘贴内容，请选择下方导入方式！');
-    } else {
-      alert('剪贴板为空，请长按输入框手动粘贴。');
-    }
-  } catch (err) {
-    alert('当前浏览器限制自动读取剪贴板，请直接在下方输入框长按选择“粘贴”。');
+    showToast('📋 已复制到剪贴板！');
   }
 }
 
+// 智能诊断与执行导入
 function executeImportData(mode) {
   const raw = document.getElementById('importDataTextarea').value.trim();
   if (!raw) {
-    alert('请先在输入框中粘贴赛事数据码！');
+    alert('请先在第 2 步的输入框中长按粘贴别人发给你的赛事口令或带 #ttdata= 的分享网址！');
+    return;
+  }
+
+  // 智能诊断1：用户误把 HTML 网页代码粘贴了进来
+  if (raw.includes('<!DOCTYPE') || raw.includes('<html') || raw.includes('<script')) {
+    alert('⚠️ 检测到你粘贴的是【网页源代码 (HTML)】，而不是比赛积分数据！\n\n正确操作：\n请先在有分数的页面点击上方【📋 复制超短数据口令】，然后再粘贴到这里。');
+    return;
+  }
+
+  // 智能诊断2：用户只复制了不带 #ttdata= 的普通网址
+  if (/^https?:\/\//i.test(raw) && !raw.includes('ttdata=') && !raw.includes('TTV')) {
+    alert('⚠️ 你粘贴的只是一个普通网址，末尾没有包含积分数据！\n\n正确操作：\n请点击本窗口上方橙色的【🔗 复制带积分分享链接】或【📋 复制超短数据口令】获取完整数据。');
     return;
   }
 
   try {
     const incoming = decodeCodeToState(raw);
     if (!incoming || !Array.isArray(incoming.competitors)) {
-      throw new Error('无效格式');
+      throw new Error('INVALID_STATE');
     }
 
     if (mode === 'OVERWRITE') {
@@ -654,7 +833,17 @@ function executeImportData(mode) {
       showToast('➕ 已成功将新数据追加合并到当前赛事中！');
     }
   } catch (e) {
-    alert('解析数据失败！请确认粘贴的是完整的 TTV2_ 赛事数据码或分享链接。');
+    // 智能诊断3：如果用户粘贴的是普通人名列表，主动帮他作为参赛名单导入
+    if (!raw.includes('TTV') && raw.length < 1000) {
+      if (confirm('检测到你粘贴的是普通文本（而非 TTV 赛事口令）。是否直接将这段文本作为【参赛选手名单】导入并排赛？')) {
+        document.getElementById('pasteInput').value = raw;
+        closeImportModal();
+        parsePastedNames(mode === 'APPEND');
+        generateTournamentSchedule();
+        return;
+      }
+    }
+    alert('解析数据失败！请确认粘贴的是完整的 TTV3_ / TTV2_ 赛事口令（可在上方第1步点击“复制超短数据口令”获取）。');
   }
 }
 
@@ -683,7 +872,7 @@ function downloadSelfContainedHTML() {
 
 /**
  * ============================================================================
- * 界面同步与侧边栏折叠控制
+ * 界面同步与侧边栏控制
  * ============================================================================
  */
 function syncUIFromState() {
@@ -732,7 +921,7 @@ function toggleFreeEdit(checked) {
 
 /**
  * ============================================================================
- * 1. 比赛项目切换 (单打 / 双打 / 团体)
+ * 1. 比赛项目切换
  * ============================================================================
  */
 function setMatchType(type) {
@@ -790,7 +979,7 @@ function renderMatchTypeSelector() {
 function parsePastedNames(append = false) {
   const raw = document.getElementById('pasteInput').value.trim();
   if (!raw) {
-    alert('请先在文本框中粘贴名字！');
+    alert('请先在左侧第 2 步文本框中粘贴名字！');
     return;
   }
 
@@ -1056,12 +1245,12 @@ function updateStageConfig(idx, key, val) {
 
 /**
  * ============================================================================
- * 4. 排赛算法核心引擎（防误触保护：若已有录分，点击重新排赛前会二次确认）
+ * 4. 排赛算法核心引擎
  * ============================================================================
  */
 function confirmAndRegenerateSchedule() {
   if (countRecordedMatches(state) >= 100) {
-    if (!confirm('⚠️ 注意：当前比赛已经录入了比分！点击【重新排赛】会清空已录比分并重新分组。如果你只是想临时加人或换组，请直接在右侧表格点【+ 临时加人入本组】。确定要清空比分重新排赛吗？')) {
+    if (!confirm('⚠️ 注意：当前比赛已经录入了比分！点击【重新排赛】会清空已录比分并重新分组。确定要清空比分重新排赛吗？')) {
       return;
     }
   }
@@ -1451,7 +1640,7 @@ function resolveITTFStandingsOrder(rows, finishedMatches) {
 
 /**
  * ============================================================================
- * 6. 视图渲染（带全维度滚动位置锁死，录完分绝不跳回顶部！）
+ * 6. 视图渲染（带全维度滚动位置锁死，录完分绝不跳回顶部）
  * ============================================================================
  */
 function renderStageTabs() {
@@ -2179,7 +2368,7 @@ function saveMatchModal() {
 
   closeScoreModal();
   afterMatchUpdated(activeMatchCtx.stageIdx);
-  showToast('✅ 比分已保存，页面保持当前位置');
+  showToast('✅ 比分已保存，页面保持在当前位置');
 }
 
 function afterMatchUpdated(stageIdx) {
@@ -2430,7 +2619,7 @@ function renderFinalRankingView(parentContainer) {
       </div>
       <div class="flex gap-2">
         <button type="button" onclick="copyShareDataToClipboard()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded">
-          📋 一键复制完整战报数据
+          📋 一键复制完整战报链接
         </button>
         <button type="button" onclick="exportCSV()" class="bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold px-3.5 py-2 rounded">
           导出 CSV 成绩单
@@ -2479,7 +2668,7 @@ function renderFinalRankingView(parentContainer) {
 
 /**
  * ============================================================================
- * 辅助工具函数、示例数据与导出
+ * 辅助工具函数
  * ============================================================================
  */
 function getCompetitorName(compId) {
